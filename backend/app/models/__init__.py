@@ -294,3 +294,121 @@ class RecommendationHistoryItem(Base):
 
     recommendation_history: Mapped[RecommendationHistory] = relationship(back_populates="items")
     item: Mapped[Item] = relationship(back_populates="recommendation_history_items")
+
+
+class LegacyImportRunStatus(str, enum.Enum):
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+class LegacyImportDisposition(str, enum.Enum):
+    IMPORTED = "IMPORTED"
+    SKIPPED_MISSING_CATEGORY = "SKIPPED_MISSING_CATEGORY"
+    SKIPPED_DUPLICATE_TITLE = "SKIPPED_DUPLICATE_TITLE"
+
+
+class LegacyImportRun(Base):
+    __tablename__ = "legacy_import_runs"
+    __table_args__ = (
+        Index(
+            "uq_legacy_import_runs_user_sha_success",
+            "user_id",
+            "source_sha256",
+            unique=True,
+            postgresql_where=text("status = 'SUCCESS'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    source_filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_total_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    imported_item_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[LegacyImportRunStatus] = mapped_column(
+        Enum(LegacyImportRunStatus, name="legacy_import_run_status", native_enum=True),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship()
+    items: Mapped[list["LegacyImportItem"]] = relationship(
+        back_populates="import_run",
+        cascade="all, delete-orphan",
+    )
+    collections: Mapped[list["LegacyImportCollection"]] = relationship(
+        back_populates="import_run",
+        cascade="all, delete-orphan",
+    )
+
+
+class LegacyImportItem(Base):
+    __tablename__ = "legacy_import_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    import_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("legacy_import_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("items.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    source_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    disposition: Mapped[LegacyImportDisposition] = mapped_column(
+        Enum(LegacyImportDisposition, name="legacy_import_disposition", native_enum=True),
+        nullable=False,
+    )
+
+    import_run: Mapped[LegacyImportRun] = relationship(back_populates="items")
+    item: Mapped[Item | None] = relationship()
+
+
+class LegacyImportCollection(Base):
+    __tablename__ = "legacy_import_collections"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    import_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("legacy_import_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    collection_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    collection_name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    import_run: Mapped[LegacyImportRun] = relationship(back_populates="collections")
+    collection: Mapped[Collection] = relationship()

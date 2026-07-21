@@ -48,6 +48,8 @@ services:
       - ./backend/alembic:/app/alembic
       - ./backend/tests:/app/tests
       - ./backend/alembic.ini:/app/alembic.ini
+      - ./legacy-data:/app/legacy-data:ro
+      - ./migration-report:/app/migration-report
     depends_on:
       postgres:
         condition: service_healthy

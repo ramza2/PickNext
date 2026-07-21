@@ -52,3 +52,7 @@ frontend/.vite/
 # Docker / local data
 *.log
 postgres-data/
+
+# Legacy personal data & dry-run reports (do not commit)
+legacy-data/*.json
+migration-report/

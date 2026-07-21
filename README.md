@@ -2,7 +2,8 @@
 
 카테고리별로 관심 항목(영화, 드라마, 애니메이션, 예능, 만화책, 음식 등)을 기록하고 랜덤 추천받는 반응형 웹/PWA 서비스입니다.
 
-기존 Android MovieManager와는 별개의 신규 프로젝트이며, 이번 저장소 범위는 **Backend·DB 기반 구성**까지입니다.
+기존 Android MovieManager와는 별개의 신규 프로젝트입니다.  
+현재 저장소 범위는 **Backend·DB 기반 구성**과 **legacy `movie.json` Dry-run 분석 도구**까지입니다.
 
 ## 기술 스택
 
@@ -28,12 +29,16 @@ PickNext/
 │  │  ├─ db/
 │  │  ├─ models/
 │  │  ├─ schemas/
+│  │  ├─ scripts/       # dry-run CLI 등
 │  │  ├─ services/
+│  │  │  └─ legacy/     # movie.json 분석·분류
 │  │  └─ main.py
 │  ├─ alembic/
 │  ├─ tests/
 │  └─ pyproject.toml
 ├─ frontend/          # placeholder only
+├─ legacy-data/       # 개인 JSON (*.json은 gitignore)
+├─ migration-report/  # Dry-run 결과 (gitignore)
 ├─ scripts/
 ├─ infra/
 ├─ docs/
@@ -51,9 +56,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Backend: http://localhost:8000  
-Health: http://localhost:8000/api/v1/health  
-OpenAPI: http://localhost:8000/docs
+Backend: http://localhost:${BACKEND_PORT:-8000}  
+Health: http://localhost:${BACKEND_PORT:-8000}/api/v1/health  
+OpenAPI: http://localhost:${BACKEND_PORT:-8000}/docs
 
 로컬에 PostgreSQL 등이 이미 `5432`/`8000`을 사용 중이면 `.env`의 `POSTGRES_PUBLISH_PORT`, `BACKEND_PORT`를 빈 포트로 변경하세요.
 
@@ -109,6 +114,65 @@ Seed 사용자 기본값(`.env`로 변경 가능):
 
 같은 명령을 여러 번 실행해도 카테고리는 중복 생성되지 않습니다.
 
+## Legacy Dry-run (movie.json 분석)
+
+실제 DB Import는 **수행하지 않습니다.** `movie.json`을 읽어 변환 가능 여부와 `series` 분류 보고서만 생성합니다.
+
+1. `legacy-data/movie.json` 배치 (`legacy-data/*.json`은 gitignore)
+2. Compose 기동 후:
+
+```bash
+docker compose exec backend python -m app.scripts.analyze_legacy_movies \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report \
+  --category-input /app/legacy-data/category.json \
+  --pretty
+```
+
+결과는 `migration-report/`에 저장됩니다 (`summary.json`, 분류 CSV, `normalized-preview.json` 등).  
+상세 정책·분류 기준은 [`docs/04-legacy-migration.md`](docs/04-legacy-migration.md)를 참고하세요.
+
+## Legacy Import (movie.json → PostgreSQL)
+
+Dry-run 검토 후 확정된 정책으로 실제 Import합니다.
+
+**확정 정책 요약**
+
+| 항목 | 처리 |
+| --- | --- |
+| 카테고리 누락 6건 | Import 제외 (`SKIPPED_MISSING_CATEGORY`) |
+| 중복 제목 5건 | 그룹당 1건만 Import (`SKIPPED_DUPLICATE_TITLE`) |
+| Ambiguous 12건 | Item은 Import, series는 폐기 (Collection/Progress NULL) — Import 대상은 **11건** (1건은 카테고리 누락과 겹침) |
+| 예상 최종 Item | **7,202건** (`7213 - 6 - 5`) |
+
+중복 선정 우선순위: `COMPLETED` → 높은 평점 → 최신 `updated_at` → 큰 `source_id`
+
+1. Migration 적용 (`0002_legacy_import` 포함)
+2. Seed 사용자·카테고리 존재 확인
+3. Dry-run으로 건수 확인:
+
+```bash
+docker compose exec backend python -m app.scripts.import_legacy_movies \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report/import \
+  --dry-run \
+  --pretty
+```
+
+4. 실제 Import:
+
+```bash
+docker compose exec backend python -m app.scripts.import_legacy_movies \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report/import \
+  --apply \
+  --pretty
+```
+
+재실행은 동일 파일 SHA-256 기준으로 차단됩니다. 개발환경에서만 `--reset-imported-data --apply`로 이전 Import 데이터를 삭제한 뒤 재실행할 수 있습니다.
+
+> **주의:** Import 후 `docker compose down -v`를 실행하면 PostgreSQL 볼륨이 삭제되어 Import 데이터가 함께 사라집니다.
+
 ## 테스트
 
 PostgreSQL이 기동되어 있고 Migration이 적용된 상태에서 실행합니다.
@@ -160,8 +224,11 @@ pytest -q
 - Alembic 초기 migration
 - 개발용 Seed (멱등)
 - Health Check API (`GET /api/v1/health`)
-- Docker Compose (`backend`, `postgres`)
+- Docker Compose (`backend`, `postgres`) + legacy 볼륨
 - pytest 기반 검증
+- legacy `movie.json` Dry-run 분석·보고서 CLI
+- legacy `movie.json` 실제 Import CLI (`--dry-run` / `--apply`)
+- Import 이력 테이블 (`legacy_import_runs`, `legacy_import_items`, `legacy_import_collections`)
 
 ## 이번 범위에서 제외
 
@@ -169,15 +236,13 @@ pytest -q
 - 인증·로그인
 - Category/Item CRUD API
 - 랜덤 추천·선택·이력 API
-- `movie.json` Import
 - TMDB / 이미지 / Traefik / 서버 배포
 
 ## 다음 개발 단계
 
 1. Category·Item CRUD API
 2. 랜덤 추천 및 `이걸로 선택` 이력 API
-3. `movie.json` legacy import
-4. React + TypeScript + Vite Frontend
-5. Traefik 및 운영 배포 설정
+3. React + TypeScript + Vite Frontend
+4. Traefik 및 운영 배포 설정
 
 설계 문서는 `docs/`를 참고하세요.
