@@ -22,8 +22,18 @@ from app.services.legacy.series_classifier import (
 from app.services.legacy.transformer import ItemConversion, convert_legacy_item
 
 
-TITLE_MAX = 300
+TITLE_REPAIR_SOURCE_ID = 2209
 PROGRESS_NOTE_MAX = 200
+
+REQUIRED_COLLECTION_PROGRESS_NOTES: tuple[str, ...] = (
+    "007 시리즈",
+    "47미터",
+    "28일 후",
+    "007 북경특급",
+    "99.9~형사 전문 변호사~",
+)
+
+ENTERTAINMENT_CATEGORY_NAME = "예능"
 
 
 @dataclass
@@ -41,7 +51,6 @@ class PlannedImportItem:
     progress_note: str | None
     cleared_ambiguous: bool
     progress_note_truncated: bool = False
-    title_truncated: bool = False
 
 
 @dataclass
@@ -153,10 +162,6 @@ def _to_planned(conv: ItemConversion) -> PlannedImportItem:
         truncated = True
 
     title = conv.title
-    title_truncated = False
-    if title and len(title) > TITLE_MAX:
-        title = title[:TITLE_MAX]
-        title_truncated = True
 
     return PlannedImportItem(
         source_id=conv.source_id,
@@ -172,7 +177,6 @@ def _to_planned(conv: ItemConversion) -> PlannedImportItem:
         progress_note=progress_note,
         cleared_ambiguous=cleared_ambiguous,
         progress_note_truncated=truncated,
-        title_truncated=title_truncated,
     )
 
 

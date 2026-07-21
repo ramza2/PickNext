@@ -6,6 +6,7 @@
 | `seed.sh` | Apply migrations, then run idempotent seed |
 | `analyze-legacy.sh` | Dry-run analyze `legacy-data/movie.json` → `migration-report/` |
 | `import-legacy.sh` | Import `movie.json` (`dry-run` or `apply`) → `migration-report/import/` |
+| `repair-legacy.sh` | Repair import data (`dry-run` or `apply`) → `migration-report/repair/` |
 
 Windows PowerShell 예:
 

@@ -175,7 +175,7 @@ class Item(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[ItemStatus] = mapped_column(
         Enum(ItemStatus, name="item_status", native_enum=True),
         nullable=False,

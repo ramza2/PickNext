@@ -161,13 +161,85 @@ migration-report/import/
 
 ## DB 볼륨 주의
 
-Import 후 다음 명령은 **Import 데이터를 삭제**한다.
+Import·보정 후 다음 명령은 **데이터를 삭제**한다.
 
 ```bash
 docker compose down -v
 ```
 
 백업·재Import 계획 없이 실행하지 않는다.
+
+## Import 데이터 보정 (3.5차)
+
+Import 전체를 재실행하지 않고 기존 7,202개 Item과 성공 Import Run을 유지한 채 다음만 보정한다.
+
+### 왜 재Import가 아닌가
+
+* 기존 UUID·Import Run·매핑을 보존해야 한다.
+* 전체 삭제·재생성은 데이터 손실 위험이 크다.
+* 보정 범위가 명확히 제한되어 있다.
+
+### DB 변경
+
+Migration `0003_legacy_data_repairs`: `items.title`을 `TEXT`로 확장한다.
+
+신규 Import·분석 로직에서 제목 300자 자동 절단을 하지 않는다.
+
+### 필수 보정
+
+| 대상 | 보정 |
+| --- | --- |
+| source_id 2209 | `movie.json` 원본 `name` 전체로 제목 복구 |
+| progress_note `007 시리즈` | Collection `007 시리즈` 연결, progress_note NULL |
+| progress_note `47미터` | Collection `47미터` 연결, progress_note NULL |
+| progress_note `28일 후` | Collection `28일 후` 연결, progress_note NULL |
+| progress_note `007 북경특급` | Collection `007 북경특급` 연결, progress_note NULL |
+| progress_note `99.9~형사 전문 변호사~` | Collection `99.9~형사 전문 변호사~` 연결, progress_note NULL |
+
+정확히 일치하는 `progress_note`만 자동 보정한다.
+
+### 추가 후보 (자동 반영 안 함)
+
+예능이 아니고 `progress_note`가 반복되거나 `"시리즈"`를 포함하는 값은 `additional-collection-candidates.csv`에만 기록한다.
+
+### 보정 CLI
+
+```bash
+docker compose exec backend alembic upgrade head
+
+docker compose exec backend python -m app.scripts.repair_legacy_import_data \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report/repair \
+  --dry-run \
+  --pretty
+
+docker compose exec backend python -m app.scripts.repair_legacy_import_data \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report/repair \
+  --apply \
+  --pretty
+```
+
+* `--dry-run` / `--apply` 중 하나 필수
+* 단일 트랜잭션, 오류 시 Rollback
+* 재실행 멱등 (`already_repaired` 기록)
+* Item 7,202건·상태별 건수·Category별 건수 불변
+
+### 보정 보고서
+
+각 실행마다 타임스탬프 디렉터리에 보고서가 저장되어 이전 실행 결과가 덮어써지지 않는다.
+
+```text
+migration-report/repair/runs/
+└─ {YYYYMMDDTHHMMSSffffff}-{dry-run|apply}/
+   ├─ repair-summary.json
+   ├─ title-repair.json
+   ├─ collection-repairs.json
+   ├─ additional-collection-candidates.csv
+   └─ repair-verification.json
+```
+
+`repair-summary.json`의 `report_run_dir`에 실제 저장 경로가 기록된다.
 
 ## 다음 단계
 

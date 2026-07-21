@@ -34,7 +34,7 @@ class CollectionCreate(BaseModel):
 
 class ItemCreate(BaseModel):
     category_id: UUID
-    title: str = Field(min_length=1, max_length=300)
+    title: str = Field(min_length=1)
     status: ItemStatus
     rating: Decimal = Field(ge=Decimal("0"), le=Decimal("5"))
     collection_id: UUID | None = None

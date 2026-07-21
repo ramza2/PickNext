@@ -233,11 +233,22 @@ def test_apply_import_and_reports(db, seeded_user, tmp_path: Path) -> None:
     assert result.summary["skipped_missing_category"] == 1
     assert result.verification["source_equation_valid"] is True
 
-    items = db.scalars(select(Item).where(Item.user_id == seeded_user.id)).all()
+    import_item_ids = set(
+        db.scalars(
+            select(LegacyImportItem.item_id).where(
+                LegacyImportItem.import_run_id == result.import_run_id,
+                LegacyImportItem.disposition == LegacyImportDisposition.IMPORTED,
+            )
+        )
+    )
+    items = db.scalars(select(Item).where(Item.id.in_(import_item_ids))).all()
     assert len(items) == 4
 
     ambiguous_row = db.scalar(
-        select(LegacyImportItem).where(LegacyImportItem.source_id == 13)
+        select(LegacyImportItem).where(
+            LegacyImportItem.import_run_id == result.import_run_id,
+            LegacyImportItem.source_id == 13,
+        )
     )
     assert ambiguous_row is not None
     ambiguous_item = db.get(Item, ambiguous_row.item_id)
@@ -245,9 +256,11 @@ def test_apply_import_and_reports(db, seeded_user, tmp_path: Path) -> None:
     assert ambiguous_item.collection_id is None
     assert ambiguous_item.progress_note is None
 
-    collections = db.scalars(select(Collection).where(Collection.user_id == seeded_user.id)).all()
-    assert len(collections) == 1
-    assert collections[0].name == "터미네이터"
+    collection_ids = {item.collection_id for item in items if item.collection_id}
+    assert len(collection_ids) == 1
+    collection = db.get(Collection, collection_ids.pop())
+    assert collection is not None
+    assert collection.name == "터미네이터"
 
     categories = db.scalar(select(func.count()).select_from(Category))
     assert categories == 10
@@ -255,9 +268,22 @@ def test_apply_import_and_reports(db, seeded_user, tmp_path: Path) -> None:
 
 
 def test_collection_not_duplicated(db, seeded_user, tmp_path: Path) -> None:
-    existing = Collection(user_id=seeded_user.id, name="터미네이터")
-    db.add(existing)
-    db.flush()
+    existing = db.scalar(
+        select(Collection).where(
+            Collection.user_id == seeded_user.id,
+            Collection.name == "터미네이터",
+        )
+    )
+    if existing is None:
+        existing = Collection(user_id=seeded_user.id, name="터미네이터")
+        db.add(existing)
+        db.flush()
+
+    before_count = db.scalar(
+        select(func.count())
+        .select_from(Collection)
+        .where(Collection.user_id == seeded_user.id, Collection.name == "터미네이터")
+    )
 
     path = tmp_path / "movie.json"
     _write_movie(
@@ -275,10 +301,12 @@ def test_collection_not_duplicated(db, seeded_user, tmp_path: Path) -> None:
         apply=True,
         commit=False,
     )
-    count = db.scalar(
-        select(func.count()).select_from(Collection).where(Collection.user_id == seeded_user.id)
+    after_count = db.scalar(
+        select(func.count())
+        .select_from(Collection)
+        .where(Collection.user_id == seeded_user.id, Collection.name == "터미네이터")
     )
-    assert count == 1
+    assert after_count == before_count
     db.rollback()
 
 
@@ -342,14 +370,26 @@ def test_reset_imported_data_dev_only(db, seeded_user, tmp_path: Path) -> None:
     )
     db.commit()
 
+    import hashlib
+
+    test_sha = hashlib.sha256(path.read_bytes()).hexdigest()
     runs = db.scalars(
         select(LegacyImportRun).where(
             LegacyImportRun.user_id == seeded_user.id,
             LegacyImportRun.status == LegacyImportRunStatus.SUCCESS,
+            LegacyImportRun.source_sha256 == test_sha,
         )
     ).all()
     assert len(runs) == 1
-    assert db.scalar(select(func.count()).select_from(Item).where(Item.user_id == seeded_user.id)) == 1
+    imported_count = db.scalar(
+        select(func.count())
+        .select_from(LegacyImportItem)
+        .where(
+            LegacyImportItem.import_run_id == runs[0].id,
+            LegacyImportItem.disposition == LegacyImportDisposition.IMPORTED,
+        )
+    )
+    assert imported_count == 1
 
 
 def test_transaction_rollback_on_error(db, seeded_user, tmp_path: Path, monkeypatch) -> None:
@@ -366,6 +406,11 @@ def test_transaction_rollback_on_error(db, seeded_user, tmp_path: Path, monkeypa
     )
 
     before = db.scalar(select(func.count()).select_from(Item))
+    before_success_runs = db.scalar(
+        select(func.count())
+        .select_from(LegacyImportRun)
+        .where(LegacyImportRun.status == LegacyImportRunStatus.SUCCESS)
+    )
     with pytest.raises(RuntimeError):
         run_legacy_import(
             db,
@@ -379,11 +424,11 @@ def test_transaction_rollback_on_error(db, seeded_user, tmp_path: Path, monkeypa
     assert db.scalar(select(func.count()).select_from(Item)) == before
     assert (
         db.scalar(
-            select(func.count()).select_from(LegacyImportRun).where(
-                LegacyImportRun.status == LegacyImportRunStatus.SUCCESS
-            )
+            select(func.count())
+            .select_from(LegacyImportRun)
+            .where(LegacyImportRun.status == LegacyImportRunStatus.SUCCESS)
         )
-        == 0
+        == before_success_runs
     )
 
 
@@ -398,7 +443,7 @@ def test_cli_requires_mode(tmp_path: Path) -> None:
 def test_progress_note_stored(db, seeded_user, tmp_path: Path) -> None:
     path = tmp_path / "movie.json"
     _write_movie(path, [_base_item(id=60, series="1~3, 5")])
-    run_legacy_import(
+    result = run_legacy_import(
         db,
         input_path=path,
         report_dir=tmp_path / "import",
@@ -406,7 +451,14 @@ def test_progress_note_stored(db, seeded_user, tmp_path: Path) -> None:
         apply=True,
         commit=False,
     )
-    item = db.scalar(select(Item).where(Item.user_id == seeded_user.id))
+    import_row = db.scalar(
+        select(LegacyImportItem).where(
+            LegacyImportItem.import_run_id == result.import_run_id,
+            LegacyImportItem.source_id == 60,
+        )
+    )
+    assert import_row is not None
+    item = db.get(Item, import_row.item_id)
     assert item is not None
     assert item.progress_note == "1~3, 5"
     assert item.collection_id is None

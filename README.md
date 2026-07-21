@@ -173,6 +173,39 @@ docker compose exec backend python -m app.scripts.import_legacy_movies \
 
 > **주의:** Import 후 `docker compose down -v`를 실행하면 PostgreSQL 볼륨이 삭제되어 Import 데이터가 함께 사라집니다.
 
+## Legacy Import 데이터 보정 (3.5차)
+
+Import를 **재실행하지 않고** 기존 7,202개 Item을 유지한 채 제한적으로 보정합니다.
+
+| 보정 항목 | 내용 |
+| --- | --- |
+| `items.title` | `VARCHAR(300)` → `TEXT` (Migration `0003_legacy_data_repairs`) |
+| source_id 2209 | 잘린 제목을 `movie.json` 원본 전체 제목으로 복구 |
+| Collection 전환 | `007 시리즈`, `47미터`, `28일 후`, `007 북경특급`, `99.9~형사 전문 변호사~` — `progress_note` → Collection 연결 |
+
+추가 후보(`additional-collection-candidates.csv`)는 보고서만 생성하며 자동 변경하지 않습니다. 보고서는 `migration-report/repair/runs/{timestamp}-{dry-run|apply}/`에 실행별로 보존됩니다.
+
+```bash
+# Migration 적용 후 Dry-run
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.scripts.repair_legacy_import_data \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report/repair \
+  --dry-run \
+  --pretty
+
+# 실제 보정
+docker compose exec backend python -m app.scripts.repair_legacy_import_data \
+  --input /app/legacy-data/movie.json \
+  --report-dir /app/migration-report/repair \
+  --apply \
+  --pretty
+```
+
+보정 CLI는 멱등합니다. 재실행 시 이미 보정된 항목은 `already_repaired`로 기록됩니다.
+
+> **금지:** `docker compose down -v`, `--reset-imported-data`, Import 전체 재실행
+
 ## 테스트
 
 PostgreSQL이 기동되어 있고 Migration이 적용된 상태에서 실행합니다.
@@ -229,6 +262,8 @@ pytest -q
 - legacy `movie.json` Dry-run 분석·보고서 CLI
 - legacy `movie.json` 실제 Import CLI (`--dry-run` / `--apply`)
 - Import 이력 테이블 (`legacy_import_runs`, `legacy_import_items`, `legacy_import_collections`)
+- Legacy Import 데이터 보정 CLI (`repair_legacy_import_data`)
+- `items.title` TEXT 확장 (Migration `0003_legacy_data_repairs`)
 
 ## 이번 범위에서 제외
 

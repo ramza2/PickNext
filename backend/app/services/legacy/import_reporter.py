@@ -48,7 +48,6 @@ def build_import_summary(
         "skipped_missing_category": plan.skipped_missing_category_count,
         "skipped_duplicate_titles": plan.skipped_duplicate_titles_count,
         "cleared_ambiguous_series": plan.cleared_ambiguous_series_count,
-        "title_truncated_count": sum(1 for item in plan.to_import if item.title_truncated),
         "planned_count": planned_count,
         "completed_count": completed_count,
         "status": status,
