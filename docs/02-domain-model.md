@@ -97,6 +97,8 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 - RecommendationHistory 삭제가 Item을 삭제하지 않는다.
 - RecommendationHistoryItem → Item은 `RESTRICT`
 - RecommendationHistoryItem → RecommendationHistory는 `CASCADE`
-- Item 삭제는 **Hard Delete**다. `deleted_at` Soft Delete·복원·보관 개념은 없다. (DELETE API는 D-3 이후)
-- Item Hard Delete 시 해당 Item을 포함한 RecommendationHistory **전체**를 선삭제한다. (구현 D-3/D-4)
-- Collection 직접 삭제는 Item이 있으면 409, 마지막 Item DELETE 시 Collection 자동 삭제. (D-5/D-6)
+- Item 삭제는 **Hard Delete**다. `deleted_at` Soft Delete·복원·보관 개념은 없다.
+- `DELETE /api/v1/items/{item_id}` 구현 완료 (D-3~D-5): 추천 이력 전체 선삭제 → Item 삭제 → 마지막이면 Collection 자동 삭제
+- Collection 직접 DELETE(Item 있으면 409)는 D-6 대기
+- RecommendationHistoryItem → Item은 `RESTRICT`
+- RecommendationHistoryItem → RecommendationHistory는 `CASCADE`

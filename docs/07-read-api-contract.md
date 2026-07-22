@@ -710,9 +710,10 @@ components:
 | 정렬 | updated_at/created_at/title/rating/status + id | 안정성 | sort 키 이름 맞춤 | ORDER BY | 낮음 |
 | 사용자 범위 | Seed 이메일 DI | 인증 전 | 체감 없음 | `get_current_user` | 인증 시 교체 |
 | rating 0.0 | 미평가 관례, NOT NULL 유지 | Legacy 6870건 | 0 표시=평가없음 | 스키마 유지 | nullable 검토 |
-| TMDB 필드 | **A-1 미포함** | 컬럼 없음 | Placeholder 유지 | 스키마 단순 | 0004 후 |
+| TMDB 필드 | **A-1 미포함** | 컬럼 없음 | Placeholder 유지 | 스키마 단순 | 0005 후 |
 | color/icon | API 미제공 | DB 없음 | 로컬 맵 | 없음 | 낮음 |
 | N+1 | joinedload | 목록 성능 | 없음 | catalog.list_items | 낮음 |
+| Item DELETE | **`DELETE /api/v1/items/{id}` 204** | Hard Delete D-3~D-5 | FE 후속 | catalog.delete_item | D-6 Collection DELETE |
 
 ---
 

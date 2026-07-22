@@ -247,8 +247,9 @@ migration-report/repair/runs/
 
 ## 다음 단계
 
-- Category·Item CRUD API
+- Category·Item CRUD API (Item Hard Delete는 D-3~D-5 완료)
 - Item Hard Delete 시 `legacy_import_items`는 `ON DELETE CASCADE`로 mapping 행이 제거된다. `legacy_import_runs`의 `imported_item_count` 등 통계는 과거 스냅샷이며 자동 감소하지 않는다.
+- 마지막 Item 삭제로 Collection이 자동 삭제되면 `legacy_import_collections` Mapping도 CASCADE 삭제된다.
 - Hard Delete 후 동일 SHA 성공 Import 재실행은 Unique로 차단될 수 있다. 재Import 정책은 별도 정의 필요.
 - 랜덤 추천 및 추천 이력 API
 - Frontend

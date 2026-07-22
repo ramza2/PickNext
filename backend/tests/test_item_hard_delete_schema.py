@@ -45,3 +45,40 @@ def test_recommendation_history_item_fk_still_restrict(engine: Engine) -> None:
     assert len(rows) == 1
     # 'r' = restrict in pg_constraint.confdeltype
     assert rows[0][0] == "r"
+
+
+def test_recommendation_history_parent_fk_cascades_items(engine: Engine) -> None:
+    rows = (
+        engine.connect()
+        .execute(
+            text(
+                """
+            SELECT confdeltype
+            FROM pg_constraint
+            WHERE conname = 'recommendation_history_items_recommendation_history_id_fkey'
+            """
+            )
+        )
+        .all()
+    )
+    assert len(rows) == 1
+    # 'c' = cascade
+    assert rows[0][0] == "c"
+
+
+def test_legacy_import_item_fk_cascades(engine: Engine) -> None:
+    rows = (
+        engine.connect()
+        .execute(
+            text(
+                """
+            SELECT confdeltype
+            FROM pg_constraint
+            WHERE conname = 'legacy_import_items_item_id_fkey'
+            """
+            )
+        )
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0][0] == "c"

@@ -1,11 +1,12 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Hard Delete Schema 전환 완료  
+**상태:** 계약 검토용 분석안 — Item Hard Delete Backend 구현 완료  
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
-**범위:** Collection·Item 생성·수정·삭제 API 구현 전 데이터·DB 제약·화면·업무 규칙 분석  
-**비범위:** DELETE API (D-3~), Frontend 쓰기 연동  
+**D-3~D-5 구현:** 2026-07-22 — `DELETE /api/v1/items/{item_id}` Hard Delete Transaction  
+**범위:** Collection·Item 쓰기 계약 분석 + Item Hard Delete 구현  
+**비범위:** Collection 직접 DELETE(D-6), Item/Collection POST·PATCH, Frontend 쓰기  
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -99,7 +100,16 @@ Index (현재):
 - Soft Delete 행 0건 → Upgrade 성공, Item 7202 / Collection 249 유지
 - Soft Delete 행 존재 시 Upgrade는 RuntimeError로 중단 (가드 DB 검증)
 - `catalog.py` Soft Delete 필터·`_active_items_filter` 제거
-- DELETE API는 **미구현** (D-3 대기)
+
+### 1.2.2 D-3~D-5 구현 결과 (2026-07-22)
+
+- Endpoint: `DELETE /api/v1/items/{item_id}` → **204** (Body 없음)
+- Service: `catalog.delete_item` — Item/Collection `FOR UPDATE` → History 부모 일괄 DELETE → Item DELETE → 잔여 EXISTS → 필요 시 Collection DELETE → `commit`
+- Legacy Mapping: DB CASCADE (Service 미호출)
+- Collection `updated_at` Touch 없음
+- 테스트: `tests/test_item_hard_delete_api.py` + FK Schema 검증
+- Backend 전체 **112 passed**
+- **D-6 대기:** Collection 직접 DELETE + Item≥1 → 409
 
 `completed_at`·TMDB 컬럼: **없음**. TMDB 계획 Migration 번호는 `docs/10`에서 조정.
 

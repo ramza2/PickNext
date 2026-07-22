@@ -1,4 +1,4 @@
-"""Read-only catalog queries: summary, categories, items, collections."""
+"""Catalog queries: summary, categories, items, collections (read + item delete)."""
 
 from __future__ import annotations
 
@@ -10,10 +10,19 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, asc, desc, exists, func, select
+from sqlalchemy import Select, asc, delete, desc, exists, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Category, Collection, Item, ItemStatus, User
+from app.models import (
+    Category,
+    Collection,
+    Item,
+    ItemStatus,
+    RecommendationHistory,
+    RecommendationHistoryItem,
+    User,
+)
 
 
 class ItemSort(str, Enum):
@@ -217,6 +226,116 @@ def get_item_detail(db: Session, user: User, item_id: UUID) -> dict[str, Any]:
     payload = _item_list_dict(item)
     payload["memo"] = item.memo
     return payload
+
+
+def delete_item(
+    db: Session,
+    user: User,
+    item_id: UUID,
+    *,
+    commit: bool = True,
+) -> None:
+    """Hard-delete an item with recommendation history and last-collection cleanup.
+
+    Transaction order (single commit when ``commit=True``):
+    1. Item SELECT FOR UPDATE
+    2. Collection SELECT FOR UPDATE when collection_id is set
+    3. Distinct recommendation_history IDs for the item
+    4. Delete those RecommendationHistory parents (items CASCADE)
+    5. Delete Item (legacy_import_items CASCADE)
+    6. EXISTS remaining items in original collection
+    7. Delete Collection when empty
+
+    Future Item POST/PATCH that attach a collection should lock the same
+    Collection row (FOR UPDATE) after validating ownership to serialize with
+    this path.
+
+    ``commit=False`` is for tests that wrap mutations in their own SAVEPOINT.
+    """
+    item = db.scalar(
+        select(Item).where(Item.id == item_id, Item.user_id == user.id).with_for_update()
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+
+    original_collection_id = item.collection_id
+    collection: Collection | None = None
+    if original_collection_id is not None:
+        collection = db.scalar(
+            select(Collection)
+            .where(
+                Collection.id == original_collection_id,
+                Collection.user_id == user.id,
+            )
+            .with_for_update()
+        )
+        if collection is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Data integrity error",
+            )
+
+    try:
+        history_ids = list(
+            db.scalars(
+                select(RecommendationHistoryItem.recommendation_history_id)
+                .where(RecommendationHistoryItem.item_id == item.id)
+                .distinct()
+            ).all()
+        )
+        if history_ids:
+            owned_ids = set(
+                db.scalars(
+                    select(RecommendationHistory.id).where(
+                        RecommendationHistory.id.in_(history_ids),
+                        RecommendationHistory.user_id == user.id,
+                    )
+                ).all()
+            )
+            if owned_ids != set(history_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Data integrity error",
+                )
+            db.execute(
+                delete(RecommendationHistory).where(
+                    RecommendationHistory.id.in_(history_ids),
+                    RecommendationHistory.user_id == user.id,
+                )
+            )
+            db.flush()
+
+        db.delete(item)
+        db.flush()
+
+        if original_collection_id is not None and collection is not None:
+            has_remaining = db.scalar(
+                select(
+                    exists().where(
+                        Item.collection_id == original_collection_id,
+                        Item.user_id == user.id,
+                    )
+                )
+            )
+            if not has_remaining:
+                db.delete(collection)
+                db.flush()
+
+        if commit:
+            db.commit()
+    except HTTPException:
+        raise
+    except IntegrityError:
+        if commit:
+            db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conflict while deleting item",
+        ) from None
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
 
 
 def _category_ref(category: Category) -> dict[str, Any]:

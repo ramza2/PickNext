@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -52,3 +52,23 @@ def read_item_detail(
     user: User = Depends(get_current_user),
 ) -> ItemDetailResponse:
     return ItemDetailResponse(**catalog.get_item_detail(db, user, item_id))
+
+
+@router.delete(
+    "/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+    responses={
+        404: {"description": "Item not found"},
+        409: {"description": "Conflict while deleting item"},
+        422: {"description": "Validation Error"},
+    },
+)
+def delete_item(
+    item_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    catalog.delete_item(db, user, item_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

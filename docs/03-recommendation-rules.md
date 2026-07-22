@@ -35,7 +35,8 @@
 
 - 추천 이력에서 각 항목의 `item_id`로 상세 화면에 이동할 수 있어야 한다.
 - 상세 화면에서 완료 상태(`PLANNED` ↔ `COMPLETED`)를 수정할 수 있어야 한다.
-- Item Hard Delete 시 해당 Item을 포함한 `recommendation_history` **전체**와 연결 행을 함께 삭제한다. (연결 행만 남겨 History를 변형하지 않음)
-- DELETE API·History 동반 삭제는 D-3/D-4에서 구현한다. Schema상 Soft Delete는 제거됨(`0004`).
+- Item Hard Delete(`DELETE /api/v1/items/{id}`, D-3~D-5 구현) 시 해당 Item을 포함한 `recommendation_history` **전체**와 연결 행·Snapshot을 함께 삭제한다.
+- 같은 History에 있던 다른 Item **본체**는 유지한다.
+- 연결 행만 지우고 부모 History를 남기지 않는다.
 
-> 참고: 실제 추천/선택 API는 이후 작업에서 구현한다. 본 문서는 도메인 규칙을 고정하기 위한 설계다.
+> 참고: 실제 추천/선택 API는 이후 작업에서 구현한다. Item 삭제 Transaction은 구현됨.
