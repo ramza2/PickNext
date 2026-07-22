@@ -1,12 +1,13 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend 구현 완료  
+**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend·Frontend 연동 완료  
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
 **D-3~D-5 구현:** 2026-07-22 — `DELETE /api/v1/items/{item_id}` Hard Delete Transaction  
 **D-6 구현:** 2026-07-22 — `DELETE /api/v1/collections/{collection_id}` (Item≥1 → 409)  
-**범위:** Collection·Item 쓰기 계약 분석 + Item·Collection Hard Delete 구현  
+**D-7 구현:** 2026-07-22 — Frontend Item·Collection DELETE Dialog·API Client·origin별 복귀  
+**범위:** Collection·Item 쓰기 계약 분석 + Item·Collection Hard Delete Backend·Frontend 삭제 연동  
 **비범위:** Item/Collection POST·PATCH, Frontend 쓰기  
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
@@ -124,7 +125,18 @@ Index (현재):
 - Collection `updated_at` Touch 없음 (409 포함)
 - 테스트: `tests/test_collection_delete_api.py`
 - Backend 전체 **128 passed** (D-6 검증 2026-07-22)
-- **잔여:** Collection POST/PATCH, Item POST/PATCH, Frontend 삭제 연동
+- **잔여:** Collection POST/PATCH, Item POST/PATCH
+
+### 1.2.4 D-7 Frontend 구현 결과 (2026-07-22)
+
+- API: `frontend/src/api/catalog.ts` — `deleteItem`, `deleteCollection` (204 → `undefined`)
+- 오류 문구: `frontend/src/api/deleteMessages.ts`
+- UI: `App.tsx` — `ConfirmModal`(pending), ItemDetailPage·CollectionDetailInline 삭제 Dialog
+- Item origin(home/items/collections) 복귀, Collection GET 404 시 「항목과 빈 컬렉션」 Toast
+- Collection `item_count > 0` → DELETE 미호출 + Toast
+- Item 행 「제거」: Hard Delete 미연결 (연결 해제 미구현 Toast)
+- 검증: `npm run build`, `npx tsc --noEmit`, `node scripts/verify-delete-api.mjs`
+- **잔여:** POST·PATCH, Bulk 삭제, Vitest/RTL
 
 ### 1.3 Item 연관 테이블
 
@@ -164,10 +176,11 @@ Migration 전제: Soft Delete 행 0건. 행이 발견되면 **자동 Hard Delete
 
 ## 3. Frontend 쓰기 UI (요약)
 
-쓰기 API 미연결. Toast만. Collection/Item 삭제 Dialog **없음**.  
-Frontend DTO에 `deleted_at` **없음**. “복원” 문구는 **백업 Import RESTORE**용이며 Item Soft Delete 복원과 무관.
+**D-7 완료 (2026-07-22):** Item·Collection Hard Delete — Confirm Dialog + `deleteItem`/`deleteCollection` API Client. origin별 복귀·재조회, Collection `item_count > 0` 사전 Toast, Backend 409 재조회. Collection 상세 Item 「제거」는 연결 해제 미구현 Toast 유지.
 
-삭제 UX는 Hard Delete·마지막 Item 시 Collection 동반 삭제·추천 이력 삭제에 맞게 연동 단계에서 Dialog를 추가한다 (`docs/10` §7).
+**미연동:** Item/Collection POST·PATCH, 상태 전환, Collection 연결 해제, Bulk 삭제.
+
+Frontend DTO에 `deleted_at` **없음**. “복원” 문구는 **백업 Import RESTORE**용이며 Item Soft Delete 복원과 무관.
 
 ---
 

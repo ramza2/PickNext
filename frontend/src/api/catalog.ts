@@ -76,3 +76,26 @@ export function getCollection(
     { signal },
   );
 }
+
+export function deleteItem(
+  itemId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  return apiRequest<void>(`/items/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+    signal,
+  });
+}
+
+export function deleteCollection(
+  collectionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  return apiRequest<void>(
+    `/collections/${encodeURIComponent(collectionId)}`,
+    {
+      method: "DELETE",
+      signal,
+    },
+  );
+}

@@ -193,6 +193,10 @@ export function useItemsReadData(
         controller.signal,
       );
       if (gen !== itemsGen.current) return;
+      if (data.total_pages > 0 && page > data.total_pages) {
+        setPageState(data.total_pages);
+        return;
+      }
       setItems(data.items);
       setTotal(data.total);
       setTotalPages(data.total_pages);

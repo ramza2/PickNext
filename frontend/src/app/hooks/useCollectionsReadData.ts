@@ -113,6 +113,10 @@ export function useCollectionsReadData(
         controller.signal,
       );
       if (requestGen !== gen.current) return;
+      if (data.total_pages > 0 && page > data.total_pages) {
+        setPageState(data.total_pages);
+        return;
+      }
       setCollections(data.collections);
       setTotal(data.total);
       setTotalPages(data.total_pages);

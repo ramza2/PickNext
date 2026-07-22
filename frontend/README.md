@@ -49,9 +49,9 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | Home — Summary / Categories / 최근 등록 | **API** |
 | Home — 빠른 추천 / 최근 선택 이력 | Mock |
 | Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
-| Item Detail | **API** (`GET /items/{id}`) · Poster Placeholder · 수정·삭제·상태 변경 미연동 |
+| Item Detail | **API** (`GET /items/{id}`) · **삭제(D-7)** · Poster Placeholder · 수정·상태 변경 미연동 |
 | Collections 목록 | **API** (검색·페이지) |
-| Collection 인라인 상세 / 소속 Item | **API** (`GET /collections/{id}` + `GET /items?collection_id=`) · 쓰기 미연동 |
+| Collection 인라인 상세 / 소속 Item | **API** · **Collection 삭제(D-7)** · Item 행 「제거」= 연결 해제 미구현 |
 | History / Recommend / TMDB / Data / Settings | Mock |
 
 API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
@@ -61,11 +61,16 @@ API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
 ```text
 src/
 ├─ api/
+│  ├─ client.ts
+│  ├─ query.ts
+│  ├─ catalog.ts
+│  └─ deleteMessages.ts
 ├─ types/
 ├─ mocks/
 ├─ utils/date.ts
 ├─ scripts/verify-collections-mapper.mjs
 ├─ scripts/verify-collection-detail-mapper.mjs
+├─ scripts/verify-delete-api.mjs
 └─ app/
    ├─ App.tsx
    ├─ hooks/useHomeReadData.ts
@@ -83,7 +88,7 @@ src/
    └─ layout/AppLayout.tsx
 ```
 
-다음: Item·Collection 쓰기 API (Phase C).
+다음: Item·Collection POST/PATCH (Phase C).
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 

@@ -107,6 +107,10 @@ export function useCollectionItemsReadData(
         controller.signal,
       );
       if (gen !== genRef.current) return;
+      if (data.total_pages > 0 && page > data.total_pages) {
+        onPageChangeRef.current(data.total_pages);
+        return;
+      }
       setItems(data.items);
       setTotal(data.total);
       setTotalPages(data.total_pages);

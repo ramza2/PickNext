@@ -10,7 +10,8 @@ Frontend 목록 연동: 2026-07-22 — B-3a.
 Frontend 상세 연동: 2026-07-22 — B-3b (`useCollectionDetail`, `useCollectionItemsReadData`).  
 D-2 Schema: 2026-07-22 — `0004_remove_item_soft_delete` (`deleted_at` / `ix_items_active` 제거).  
 D-3~D-5: 2026-07-22 — Item Hard Delete 시 마지막 Item이면 Collection 자동 삭제.  
-D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard Delete / Item≥1 → 409 (Item unlink 없음).
+D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard Delete / Item≥1 → 409 (Item unlink 없음).  
+D-7: 2026-07-22 — Frontend Collection·Item 삭제 Dialog 및 DELETE API 연동, `item_count > 0` 사전 차단, origin별 복귀.
 
 근거: SQLAlchemy Model, Alembic `0001`~`0004`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 
@@ -28,7 +29,7 @@ D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard De
 | 소속 Item `GET /items?collection_id=&sort=title&order=asc` | **연동 완료** · 기본 `page_size` · Item 영역 페이지네이션 |
 | 부분 실패 | Collection 성공+Item 실패 → 메타 유지·Item 재시도 / Collection 실패·404 → Item 미표시 |
 | Item 상세 복귀 | `origin=collections` · Collection ID·Item page 복원 · `collectionsSnapshot` 유지 |
-| Collection 쓰기 | Item·Collection **DELETE Backend 완료 (D-3~D-6)** / POST·PATCH·FE 삭제 UI **대기** |
+| Collection 쓰기 | Item·Collection **DELETE FE 연동 완료 (D-7)** / POST·PATCH **대기** |
 | 구현 파일 | `getCollection`, `useCollectionDetail`, `useCollectionItemsReadData`, `CollectionDetailInline` |
 
 ```text
@@ -720,4 +721,4 @@ ORDER BY c.sort_order, c.name
 | 2026-07-22 | Backend 구현·테스트·Smoke 완료, 상태 → **Backend 구현 완료** |
 | 2026-07-22 | Frontend B-3a 목록 연동 완료 · 상세 연동 대기 |
 | 2026-07-22 | Frontend B-3b 인라인 상세·소속 Item 연동 완료 · 쓰기(삭제 UI) 대기 |
-| 2026-07-22 | D-6 Collection 직접 DELETE Backend 완료 · §4 Mock 기준선 문구 정리 |
+| 2026-07-22 | D-7 Frontend Item·Collection DELETE Dialog·API 연동 |

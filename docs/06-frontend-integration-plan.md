@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend Phase B-2c Item 상세 API 연동 완료  
+> **상태:** Frontend D-7 Item·Collection 삭제 API 연동 완료  
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (이번 단계):** Item 쓰기 API, Collection/History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (잔여):** Item/Collection POST·PATCH, History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -66,7 +66,7 @@ frontend/
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
 
-**Home·Items 목록·Item Detail·Collection 목록·Collection 상세**는 Backend 읽기 API로 표시한다. 추천·History·TMDB 등과 Collection·Item 쓰기는 Mock 또는 대기. API 오류 시 Mock으로 Fallback하지 않는다.
+**Home·Items 목록·Item Detail·Collection 목록·Collection 상세**는 Backend 읽기 API로 표시한다. **Item·Collection Hard Delete(D-7)** 는 Backend DELETE API와 Confirm Dialog로 연동됐다. 추천·History·TMDB·Item/Collection POST·PATCH는 Mock 또는 대기. API 오류 시 Mock으로 Fallback하지 않는다.
 
 ## 3. 화면 목록
 
@@ -219,13 +219,24 @@ frontend/
 - `GET /items/{item_id}` + Loading·404·Error·재시도·Abort
 - Origin 기반 뒤로가기 (Items ↔ Home)
 - Items 검색·필터·정렬·페이지·View Snapshot 보존
-- 수정·상태·삭제 버튼은 안내 Toast (쓰기 미연동)
+- 수정·상태 버튼은 안내 Toast (POST·PATCH 미연동)
+- **삭제(D-7):** `DELETE /items/{id}` Confirm Dialog + origin별 복귀·재조회
 - Mock 제목 매칭 없음
+
+### Phase D-7 — Item·Collection 삭제 ✅ 완료 (2026-07-22)
+
+- `deleteItem` / `deleteCollection` API Client (204 No Content)
+- Item 상세·Collection 상세 기존 삭제 버튼 → Confirm Dialog
+- Item: 추천 이력·마지막 Collection 자동 삭제 안내
+- Collection: `item_count > 0` 사전 Toast 차단, Backend 409 후 재조회
+- Collection 상세 Item 행 「제거」: 연결 해제 미구현 Toast 유지 (Hard Delete 미연결)
+- origin(home/items/collections)별 복귀, Snapshot·페이지 보존, 마지막 페이지 보정
+- `scripts/verify-delete-api.mjs` (Fetch Mock)
 
 ### 다음 권장
 
 ```text
-Item·Collection 쓰기 API (생성·수정·상태·삭제) — Phase C
+Item·Collection POST·PATCH (생성·수정·상태·연결 해제)
 ```
 
 ### Phase C — 쓰기·추천·TMDB
@@ -252,6 +263,8 @@ GET /api/v1/items
 GET /api/v1/items/{item_id}
 GET /api/v1/collections
 GET /api/v1/collections/{collection_id}
+DELETE /api/v1/items/{item_id}
+DELETE /api/v1/collections/{collection_id}
 ```
 
 ### Frontend 연동 현황
@@ -261,12 +274,13 @@ GET /api/v1/collections/{collection_id}
 | Home Summary / Categories / 최근 등록 | ✅ API |
 | Home 빠른 추천 / 최근 선택 | Mock |
 | Items 목록 | ✅ API |
-| Item 상세 | ✅ API (쓰기 미연동) |
+| Item 상세 | ✅ API · **삭제(D-7)** |
 | Collections 목록 | ✅ API (B-3a) |
-| Collections 인라인 상세 · 소속 Item | ✅ API (B-3b, 쓰기 대기) |
+| Collections 인라인 상세 · 소속 Item | ✅ API (B-3b) · **Collection 삭제(D-7)** |
+| Item·Collection DELETE UI | ✅ D-7 |
 | History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
-| 쓰기·추천·TMDB API | 미완료 |
+| POST·PATCH·추천·TMDB API | 미완료 |
 
 ## 9. 위험 요소
 

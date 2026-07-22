@@ -62,6 +62,12 @@ import {
   mapApiItemDetailToViewModel,
 } from "./mappers/itemDetail";
 import { formatDate } from "../utils/date";
+import { deleteCollection, deleteItem, getCollection } from "../api/catalog";
+import { ApiError } from "../api/client";
+import {
+  collectionDeleteErrorMessage,
+  itemDeleteErrorMessage,
+} from "../api/deleteMessages";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -168,22 +174,22 @@ function Toast({ msg }: { msg: string }) {
   );
 }
 
-function ConfirmModal({ title, body, danger, confirmLabel, onConfirm, onClose, children }: {
-  title: string; body: string; danger?: boolean; confirmLabel: string;
+function ConfirmModal({ title, body, danger, confirmLabel, pending, onConfirm, onClose, children }: {
+  title: string; body: string; danger?: boolean; confirmLabel: string; pending?: boolean;
   onConfirm: () => void; onClose: () => void; children?: ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-        <h3 className="text-base font-bold text-foreground mb-2">{title}</h3>
-        <p className="text-sm text-muted-foreground mb-4">{body}</p>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 pb-20 sm:pb-4" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+      <div className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[min(85vh,calc(100dvh-6rem))] overflow-y-auto">
+        <h3 id="confirm-modal-title" className="text-base font-bold text-foreground mb-2 break-words">{title}</h3>
+        <p className="text-sm text-muted-foreground mb-4 whitespace-pre-line break-words">{body}</p>
         {children}
         <div className="flex gap-3 mt-4">
-          <button onClick={onClose}
-            className="flex-1 border border-border text-foreground py-2.5 rounded-xl font-medium hover:bg-muted transition-colors text-sm">취소</button>
-          <button onClick={onConfirm}
-            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors text-sm ${danger?"bg-red-500 hover:bg-red-600 text-white":"bg-primary hover:bg-blue-700 text-white"}`}>
-            {confirmLabel}
+          <button onClick={onClose} disabled={pending}
+            className="flex-1 border border-border text-foreground py-2.5 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed">취소</button>
+          <button onClick={onConfirm} disabled={pending}
+            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed ${danger?"bg-red-500 hover:bg-red-600 text-white":"bg-primary hover:bg-blue-700 text-white"}`}>
+            {pending ? "삭제 중..." : confirmLabel}
           </button>
         </div>
       </div>
@@ -544,13 +550,23 @@ function ItemFormModal({ editItem, onClose, onSave, showToast }: {
 
 // ─── Item Detail Page ─────────────────────────────────────────────────────────
 
-function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로" }: {
+function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로", origin = "items", collectionId, collectionItemsPage, onDeleteSuccess }: {
   itemId: string | null;
   onBack: () => void;
   showToast: (m: string) => void;
   backLabel?: string;
+  origin?: "items" | "home" | "collections";
+  collectionId?: string;
+  collectionItemsPage?: number;
+  onDeleteSuccess?: (context: {
+    origin: "items" | "home" | "collections";
+    collectionId?: string;
+    collectionItemsPage?: number;
+  }) => void | Promise<void>;
 }) {
   const { item, isLoading, error, reload } = useItemDetail(itemId);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
 
   if (!itemId) {
     return (
@@ -664,6 +680,54 @@ function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로" 
     { label: "수정일", value: updatedLabel || "—", muted: !updatedLabel },
   ];
 
+  const deleteDialogBody = [
+    `"${vm.title}" 항목을 삭제합니다.`,
+    "삭제된 항목은 복구할 수 없습니다.",
+    "이 항목이 포함된 추천 이력도 함께 삭제됩니다.",
+    vm.collectionName
+      ? "이 항목이 컬렉션의 마지막 항목이면 컬렉션도 함께 삭제됩니다."
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const handleDeleteConfirm = async () => {
+    if (!item || deletePending) return;
+    setDeletePending(true);
+    try {
+      await deleteItem(item.id);
+      setShowDeleteConfirm(false);
+      const ctx = {
+        origin,
+        collectionId: collectionId ?? item.collection?.id ?? undefined,
+        collectionItemsPage,
+      };
+      if (onDeleteSuccess) {
+        await onDeleteSuccess(ctx);
+      } else {
+        onBack();
+        showToast("항목을 삭제했습니다.");
+      }
+    } catch (err) {
+      const message = itemDeleteErrorMessage(err);
+      showToast(message);
+      if (err instanceof ApiError && err.status === 404) {
+        setShowDeleteConfirm(false);
+        if (onDeleteSuccess) {
+          await onDeleteSuccess({
+            origin,
+            collectionId: collectionId ?? item.collection?.id ?? undefined,
+            collectionItemsPage,
+          });
+        } else {
+          onBack();
+        }
+      }
+    } finally {
+      setDeletePending(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
@@ -734,11 +798,25 @@ function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로" 
           <Layers size={15}/> Collection 이동
         </button>
 
-        <button onClick={() => showToast("항목 삭제 기능은 다음 단계에서 제공됩니다.")}
+        <button onClick={() => setShowDeleteConfirm(true)}
           className="w-full flex items-center gap-2 justify-center border border-red-200 text-red-600 py-3 rounded-xl font-medium hover:bg-red-50 transition-colors text-sm">
           <Trash2 size={15}/> 삭제
         </button>
       </div>
+
+      {showDeleteConfirm && (
+        <ConfirmModal
+          title="항목 삭제"
+          body={deleteDialogBody}
+          danger
+          confirmLabel="삭제"
+          pending={deletePending}
+          onConfirm={() => void handleDeleteConfirm()}
+          onClose={() => {
+            if (!deletePending) setShowDeleteConfirm(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2168,6 +2246,10 @@ function CollectionsPage({
         onBack={() => onSelectionChange(null)}
         openItemDetail={openItemDetail}
         showToast={showToast}
+        onCollectionDeleted={() => {
+          onSelectionChange(null);
+          reload();
+        }}
       />
     );
   }
@@ -2347,6 +2429,7 @@ function CollectionDetailInline({
   onBack,
   openItemDetail,
   showToast,
+  onCollectionDeleted,
 }: {
   collectionId: string;
   itemsPage: number;
@@ -2357,6 +2440,7 @@ function CollectionDetailInline({
     context: { collectionId: string; collectionItemsPage: number },
   ) => void;
   showToast: (m: string) => void;
+  onCollectionDeleted: () => void;
 }) {
   const {
     collection,
@@ -2365,6 +2449,9 @@ function CollectionDetailInline({
     isNotFound,
     reload: reloadDetail,
   } = useCollectionDetail(collectionId);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
 
   const detailReady = Boolean(collection) && !detailError;
   const {
@@ -2396,6 +2483,40 @@ function CollectionDetailInline({
 
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
+
+  const handleCollectionDeleteClick = () => {
+    if (!detailVm) return;
+    if (detailVm.itemCount > 0) {
+      showToast(
+        "항목이 있는 컬렉션은 삭제할 수 없습니다. 컬렉션의 항목을 모두 삭제한 뒤 다시 시도해 주세요.",
+      );
+      return;
+    }
+    setShowDeleteConfirm(true);
+  };
+
+  const handleCollectionDeleteConfirm = async () => {
+    if (deletePending) return;
+    setDeletePending(true);
+    try {
+      await deleteCollection(collectionId);
+      setShowDeleteConfirm(false);
+      showToast("컬렉션을 삭제했습니다.");
+      onCollectionDeleted();
+    } catch (err) {
+      showToast(collectionDeleteErrorMessage(err));
+      if (err instanceof ApiError && err.status === 409) {
+        setShowDeleteConfirm(false);
+        void reloadDetail();
+        void reloadItems();
+      } else if (err instanceof ApiError && err.status === 404) {
+        setShowDeleteConfirm(false);
+        onCollectionDeleted();
+      }
+    } finally {
+      setDeletePending(false);
+    }
+  };
 
   if (isDetailLoading && !detailVm) {
     return (
@@ -2505,7 +2626,7 @@ function CollectionDetailInline({
             </button>
             <button
               type="button"
-              onClick={() => showToast("Collection 삭제 API는 아직 연결되지 않았습니다.")}
+              onClick={handleCollectionDeleteClick}
               className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors"
               title="삭제"
             >
@@ -2636,7 +2757,9 @@ function CollectionDetailInline({
                     </button>
                     <button
                       type="button"
-                      onClick={() => showToast("Collection에서 제거는 다음 단계에서 제공됩니다.")}
+                      onClick={() =>
+                        showToast("컬렉션에서 항목 제거 기능은 아직 지원하지 않습니다.")
+                      }
                       className="text-[10px] border border-border text-muted-foreground px-2 py-1 rounded-lg hover:bg-muted transition-colors"
                     >
                       제거
@@ -2709,6 +2832,20 @@ function CollectionDetailInline({
             </div>
           )}
         </>
+      )}
+
+      {showDeleteConfirm && detailVm && (
+        <ConfirmModal
+          title="컬렉션 삭제"
+          body={`"${detailVm.name}" 컬렉션을 삭제합니다.\n삭제된 컬렉션은 복구할 수 없습니다.`}
+          danger
+          confirmLabel="삭제"
+          pending={deletePending}
+          onConfirm={() => void handleCollectionDeleteConfirm()}
+          onClose={() => {
+            if (!deletePending) setShowDeleteConfirm(false);
+          }}
+        />
       )}
     </div>
   );
@@ -3076,6 +3213,47 @@ export default function App() {
     setItemDetailSelection(null);
   }, [itemDetailSelection]);
 
+  const handleItemDeleteSuccess = useCallback(async (context: {
+    origin: ItemDetailOrigin;
+    collectionId?: string;
+    collectionItemsPage?: number;
+  }) => {
+    if (context.origin === "collections" && context.collectionId) {
+      try {
+        await getCollection(context.collectionId);
+        setCollectionDetailSelection({
+          collectionId: context.collectionId,
+          itemsPage: context.collectionItemsPage ?? 1,
+        });
+        setPage("collections");
+        setItemDetailSelection(null);
+        showToast("항목을 삭제했습니다.");
+      } catch (err) {
+        setItemDetailSelection(null);
+        setPage("collections");
+        if (err instanceof ApiError && err.status === 404) {
+          setCollectionDetailSelection(null);
+          showToast("항목과 빈 컬렉션을 삭제했습니다.");
+        } else {
+          setCollectionDetailSelection(null);
+          showToast("항목은 삭제했지만 컬렉션 상태를 새로 불러오지 못했습니다.");
+        }
+      }
+      return;
+    }
+
+    if (context.origin === "home") {
+      setPage("home");
+      setItemDetailSelection(null);
+      showToast("항목을 삭제했습니다.");
+      return;
+    }
+
+    setPage("items");
+    setItemDetailSelection(null);
+    showToast("항목을 삭제했습니다.");
+  }, [showToast]);
+
   const navigateFromLayout = useCallback((next: Page) => {
     if (next !== "item-detail") {
       setItemDetailSelection(null);
@@ -3135,6 +3313,10 @@ export default function App() {
             itemId={itemDetailSelection?.itemId ?? null}
             onBack={closeItemDetail}
             showToast={showToast}
+            origin={itemDetailSelection?.origin ?? "items"}
+            collectionId={itemDetailSelection?.collectionId}
+            collectionItemsPage={itemDetailSelection?.collectionItemsPage}
+            onDeleteSuccess={handleItemDeleteSuccess}
             backLabel={
               itemDetailSelection?.origin === "collections"
                 ? "Collection으로"
