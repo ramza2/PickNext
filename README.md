@@ -36,7 +36,7 @@ PickNext/
 │  ├─ alembic/
 │  ├─ tests/
 │  └─ pyproject.toml
-├─ frontend/          # placeholder only
+├─ frontend/          # Figma 기준선 + 구조 준비 완료, 읽기 API 연동 전
 ├─ legacy-data/       # 개인 JSON (*.json은 gitignore)
 ├─ migration-report/  # Dry-run 결과 (gitignore)
 ├─ scripts/
@@ -258,10 +258,11 @@ pytest -q
 - Docker Compose (`backend`, `postgres`)
 - Legacy Dry-run / Import / 보정 CLI
 - **Category·Item 읽기 API** (`GET /summary`, `/categories`, `/items`, `/items/{id}`)
+- Frontend Phase B-1 구조 준비 (Proxy·API Client·Mock/Layout 분리, 화면은 아직 Mock)
 
 ## 이번 범위에서 제외
 
-- Frontend API 연동 / App.tsx 분리
+- Frontend 읽기 API 화면 연동 (Phase B-2)
 - 인증·로그인
 - Category/Item/Collection 쓰기 API
 - 랜덤 추천·선택·이력 API
@@ -270,7 +271,7 @@ pytest -q
 
 ## 다음 개발 단계
 
-1. Frontend 읽기 연동 (`docs/06-frontend-integration-plan.md` Phase A~B)
+1. Frontend Phase B-2 읽기 API 점진 연결 (`docs/06-frontend-integration-plan.md`)
 2. Category·Item·Collection CRUD API
 3. 랜덤 추천 및 `이걸로 선택` 이력 API
 4. TMDB Migration·검색·등록 Backend

@@ -9,196 +9,27 @@ import {
   GripVertical, Eye, ExternalLink, Lock, ChevronsLeft, ChevronsRight,
   ShieldAlert, FileText, Palette,
 } from "lucide-react";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Page = "home" | "search" | "recommend" | "items" | "collections"
-          | "history" | "data" | "settings"
-          | "item-detail" | "history-detail" | "category-manage";
-type Status = "PLANNED" | "COMPLETED";
-type RecommendStep = "setup" | "result" | "complete";
-type Candidate = { type: "ITEM"; data: Item } | { type: "COLLECTION"; data: Collection };
-
-interface Category {
-  id: string; name: string; icon: ReactNode;
-  color: string; bgColor: string;
-  total: number; planned: number; completed: number;
-}
-interface Item {
-  id: string; title: string; categoryId: string; collectionId?: string;
-  status: Status; rating?: number; progressNote?: string; memo?: string;
-  sourceType?: "MOVIE" | "TV"; sourceFrom?: "TMDB";
-  releaseDate?: string; overview?: string;
-  registeredAt: string; updatedAt: string;
-}
-interface Collection {
-  id: string; name: string; categoryId: string;
-  itemCount: number; plannedCount: number; completedCount: number;
-  avgRating?: number; updatedAt: string;
-}
-interface HistoryEntry {
-  id: string; selectedAt: string; title: string; categoryId: string;
-  statusAtTime: Status; currentStatus: Status; type: "ITEM" | "COLLECTION";
-  itemId?: string; collectionId?: string;
-}
-interface TMDBResult {
-  id: number; title: string; originalTitle: string; type: "MOVIE" | "TV";
-  releaseDate: string; country: string; rating: number;
-  genres: string[]; overview: string;
-  poster?: string; cast?: string[];
-  runtime?: number; seasons?: number;
-  alreadyAdded?: boolean;
-}
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const CATEGORIES: Category[] = [
-  { id:"movie",    name:"영화",       icon:<Film size={14}/>,     color:"#3B82F6", bgColor:"#EFF6FF", total:1200, planned:820,  completed:380 },
-  { id:"kdrama",   name:"한국드라마", icon:<Tv size={14}/>,       color:"#8B5CF6", bgColor:"#F5F3FF", total:1850, planned:1200, completed:650 },
-  { id:"jdrama",   name:"일본드라마", icon:<Tv size={14}/>,       color:"#F97316", bgColor:"#FFF7ED", total:580,  planned:380,  completed:200 },
-  { id:"usdrama",  name:"미국드라마", icon:<Tv size={14}/>,       color:"#EF4444", bgColor:"#FEF2F2", total:420,  planned:280,  completed:140 },
-  { id:"cndrama",  name:"중국드라마", icon:<Tv size={14}/>,       color:"#EC4899", bgColor:"#FDF2F8", total:180,  planned:120,  completed:60  },
-  { id:"anime",    name:"애니메이션", icon:<Smile size={14}/>,    color:"#6366F1", bgColor:"#EEF2FF", total:1400, planned:900,  completed:500 },
-  { id:"animemov", name:"애니 영화",  icon:<Film size={14}/>,     color:"#7C3AED", bgColor:"#F5F3FF", total:380,  planned:250,  completed:130 },
-  { id:"variety",  name:"예능",       icon:<Smile size={14}/>,    color:"#D97706", bgColor:"#FFFBEB", total:290,  planned:180,  completed:110 },
-  { id:"manga",    name:"만화책",     icon:<BookOpen size={14}/>, color:"#10B981", bgColor:"#ECFDF5", total:650,  planned:420,  completed:230 },
-  { id:"food",     name:"음식",       icon:<Utensils size={14}/>, color:"#F59E0B", bgColor:"#FFFBEB", total:252,  planned:158,  completed:94  },
-];
-
-const ITEMS: Item[] = [
-  { id:"i1",  title:"기생충",                    categoryId:"movie",    status:"COMPLETED", rating:5.0, sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2019-05-30", overview:"사기꾼 가족이 부유한 박 사장 가족에게 점점 침투하면서 벌어지는 계층 갈등을 그린 봉준호 감독의 블랙 코미디 스릴러.", registeredAt:"2023-06-10", updatedAt:"2024-01-15" },
-  { id:"i2",  title:"오징어 게임",               categoryId:"kdrama",   status:"PLANNED",   sourceType:"TV",    sourceFrom:"TMDB", releaseDate:"2021-09-17", overview:"456명의 탈락자들이 목숨을 건 서바이벌 게임에 참여하는 넷플릭스 오리지널 시리즈.", registeredAt:"2023-07-20", updatedAt:"2023-07-20" },
-  { id:"i3",  title:"이상한 변호사 우영우",       categoryId:"kdrama",   status:"COMPLETED", rating:5.0, releaseDate:"2022-06-29", overview:"자폐 스펙트럼 장애를 가진 천재 변호사 우영우의 성장과 사랑 이야기.", registeredAt:"2023-08-01", updatedAt:"2024-02-10" },
-  { id:"i4",  title:"더 글로리",                 categoryId:"kdrama",   status:"COMPLETED", rating:4.5, sourceType:"TV",    sourceFrom:"TMDB", releaseDate:"2022-12-30", overview:"학창시절 극심한 폭력 피해를 당한 여성의 치밀한 복수극. 송혜교 주연.", registeredAt:"2023-09-15", updatedAt:"2024-03-01" },
-  { id:"i5",  title:"나의 해방일지",             categoryId:"kdrama",   status:"COMPLETED", rating:4.5, releaseDate:"2022-04-09", overview:"서울 근교 소도시 산포에 사는 세 남매와 정체불명의 남자의 이야기. 박해영 작가.", registeredAt:"2023-07-05", updatedAt:"2024-01-20" },
-  { id:"i6",  title:"슬기로운 의사생활",         categoryId:"kdrama",   collectionId:"c1",  status:"COMPLETED", rating:4.5, releaseDate:"2020-03-12", overview:"의대 99학번 동기 다섯 명이 의사와 사람으로 살아가는 이야기.", registeredAt:"2023-06-20", updatedAt:"2024-01-10" },
-  { id:"i7",  title:"슬기로운 의사생활 시즌2",   categoryId:"kdrama",   collectionId:"c1",  status:"COMPLETED", rating:4.5, releaseDate:"2021-06-17", registeredAt:"2023-06-20", updatedAt:"2024-01-10" },
-  { id:"i8",  title:"사랑의 불시착",             categoryId:"kdrama",   status:"COMPLETED", rating:4.0, releaseDate:"2019-12-14", overview:"패러글라이딩 사고로 북한에 불시착한 재벌 상속녀와 북한 장교의 사랑 이야기.", registeredAt:"2023-06-15", updatedAt:"2024-01-08" },
-  { id:"i9",  title:"킹덤",                      categoryId:"kdrama",   status:"PLANNED",   sourceType:"TV",    sourceFrom:"TMDB", releaseDate:"2019-01-25", registeredAt:"2023-10-01", updatedAt:"2023-10-01" },
-  { id:"i10", title:"지금 우리 학교는",          categoryId:"kdrama",   status:"PLANNED",   sourceType:"TV",    sourceFrom:"TMDB", releaseDate:"2022-01-28", registeredAt:"2023-11-10", updatedAt:"2023-11-10" },
-  { id:"i11", title:"파친코",                    categoryId:"kdrama",   status:"PLANNED",   sourceType:"TV",    sourceFrom:"TMDB", releaseDate:"2022-03-25", overview:"한국에서 일본으로 이주한 한 가족의 4대에 걸친 서사 드라마. 애플TV+ 오리지널.", registeredAt:"2024-01-05", updatedAt:"2024-01-05" },
-  { id:"i12", title:"비밀의 숲",                 categoryId:"kdrama",   collectionId:"c8",  status:"COMPLETED", rating:5.0, releaseDate:"2017-06-10", registeredAt:"2023-05-20", updatedAt:"2023-12-15" },
-  { id:"i13", title:"미스터 션샤인",             categoryId:"kdrama",   status:"COMPLETED", rating:4.0, releaseDate:"2018-07-07", registeredAt:"2023-05-25", updatedAt:"2023-12-20" },
-  { id:"i14", title:"응답하라 1988",             categoryId:"kdrama",   status:"COMPLETED", rating:5.0, releaseDate:"2015-11-06", overview:"1988년 서울 쌍문동 골목길에 사는 다섯 가족의 추억 이야기.", registeredAt:"2023-04-10", updatedAt:"2023-11-30" },
-  { id:"i15", title:"도깨비",                    categoryId:"kdrama",   status:"COMPLETED", rating:4.5, releaseDate:"2016-12-02", registeredAt:"2023-04-15", updatedAt:"2023-12-01" },
-  { id:"i16", title:"범죄도시 4",                categoryId:"movie",    collectionId:"c6",  status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2024-04-24", registeredAt:"2024-03-15", updatedAt:"2024-03-15" },
-  { id:"i17", title:"서울의 봄",                 categoryId:"movie",    status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2023-11-22", registeredAt:"2024-01-20", updatedAt:"2024-01-20" },
-  { id:"i18", title:"콘크리트 유토피아",         categoryId:"movie",    status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2023-08-09", registeredAt:"2024-01-25", updatedAt:"2024-01-25" },
-  { id:"i19", title:"헌트",                      categoryId:"movie",    status:"COMPLETED", rating:4.0, sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2022-08-10", registeredAt:"2023-09-01", updatedAt:"2024-02-01" },
-  { id:"i20", title:"탑건: 매버릭",              categoryId:"movie",    status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2022-05-27", registeredAt:"2024-02-10", updatedAt:"2024-02-10" },
-  { id:"i21", title:"오펜하이머",                categoryId:"movie",    status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2023-07-21", registeredAt:"2024-02-15", updatedAt:"2024-02-15" },
-  { id:"i22", title:"패스트 라이브즈",           categoryId:"movie",    status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2023-01-20", registeredAt:"2024-02-20", updatedAt:"2024-02-20" },
-  { id:"i23", title:"원피스",                    categoryId:"anime",    status:"PLANNED",   progressNote:"1~1050화 진행 중", releaseDate:"1999-10-20", registeredAt:"2023-04-01", updatedAt:"2024-03-10" },
-  { id:"i24", title:"나루토 질풍전",             categoryId:"anime",    status:"COMPLETED", rating:5.0, progressNote:"1~500화 완료", releaseDate:"2007-02-15", registeredAt:"2023-04-01", updatedAt:"2023-12-01" },
-  { id:"i25", title:"귀멸의 칼날",               categoryId:"anime",    status:"PLANNED",   progressNote:"44화까지 시청", releaseDate:"2019-04-06", registeredAt:"2023-05-10", updatedAt:"2024-01-15" },
-  { id:"i26", title:"진격의 거인",               categoryId:"anime",    status:"COMPLETED", rating:5.0, progressNote:"파이널 시즌 포함 전체", releaseDate:"2013-04-07", registeredAt:"2023-04-05", updatedAt:"2024-01-20" },
-  { id:"i27", title:"헌터x헌터 (2011)",         categoryId:"anime",    status:"PLANNED",   progressNote:"1~148화", releaseDate:"2011-10-02", registeredAt:"2023-06-01", updatedAt:"2023-06-01" },
-  { id:"i28", title:"강철의 연금술사: 브라더후드", categoryId:"anime", collectionId:"c2",  status:"COMPLETED", rating:5.0, releaseDate:"2009-04-05", registeredAt:"2023-04-10", updatedAt:"2023-11-15" },
-  { id:"i29", title:"스파이×패밀리",            categoryId:"anime",    status:"PLANNED",   releaseDate:"2022-04-09", registeredAt:"2024-01-10", updatedAt:"2024-01-10" },
-  { id:"i30", title:"리갈 하이",                 categoryId:"jdrama",   status:"COMPLETED", rating:4.5, releaseDate:"2012-04-16", overview:"독설가 변호사 코미카도와 신인 변호사 마야마의 법정 코미디.", registeredAt:"2023-07-10", updatedAt:"2024-02-15" },
-  { id:"i31", title:"한자와 나오키",             categoryId:"jdrama",   status:"COMPLETED", rating:4.5, releaseDate:"2013-07-07", registeredAt:"2023-07-15", updatedAt:"2024-02-20" },
-  { id:"i32", title:"도쿄 러브스토리",           categoryId:"jdrama",   status:"PLANNED",   releaseDate:"1991-01-07", registeredAt:"2024-01-30", updatedAt:"2024-01-30" },
-  { id:"i33", title:"허니 앤 클로버",            categoryId:"manga",    status:"PLANNED",   memo:"10권 완결 작품", releaseDate:"2000-11-01", registeredAt:"2023-09-20", updatedAt:"2023-09-20" },
-  { id:"i34", title:"도쿄 구울",                 categoryId:"manga",    status:"PLANNED",   progressNote:"3권까지 읽음", releaseDate:"2011-09-08", registeredAt:"2023-10-05", updatedAt:"2024-01-05" },
-  { id:"i35", title:"을지로 노가리 골목",        categoryId:"food",     status:"PLANNED",   memo:"친구랑 꼭 가기", registeredAt:"2024-01-28", updatedAt:"2024-01-28" },
-  { id:"i36", title:"무브 투 헤븐",              categoryId:"kdrama",   status:"COMPLETED", rating:4.5, sourceType:"TV",    sourceFrom:"TMDB", releaseDate:"2021-05-14", registeredAt:"2023-08-20", updatedAt:"2024-02-25" },
-  { id:"i37", title:"악의 꽃",                  categoryId:"kdrama",   status:"PLANNED",   releaseDate:"2020-07-29", registeredAt:"2024-02-05", updatedAt:"2024-02-05" },
-  { id:"i38", title:"이니셰린의 밴시",           categoryId:"movie",    status:"PLANNED",   sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2022-10-21", registeredAt:"2024-03-01", updatedAt:"2024-03-01" },
-  { id:"i39", title:"부산행",                    categoryId:"movie",    status:"COMPLETED", rating:4.0, sourceType:"MOVIE", sourceFrom:"TMDB", releaseDate:"2016-07-20", registeredAt:"2023-06-01", updatedAt:"2023-11-10" },
-  { id:"i40", title:"악마판사",                  categoryId:"kdrama",   status:"PLANNED",   releaseDate:"2021-07-03", registeredAt:"2024-03-05", updatedAt:"2024-03-05" },
-];
-
-const COLLECTIONS: Collection[] = [
-  { id:"c1", name:"슬기로운 시리즈",        categoryId:"kdrama",  itemCount:3,  plannedCount:1, completedCount:2, avgRating:4.5, updatedAt:"2024-01-10" },
-  { id:"c2", name:"강철의 연금술사",        categoryId:"anime",   itemCount:3,  plannedCount:0, completedCount:3, avgRating:5.0, updatedAt:"2023-11-15" },
-  { id:"c3", name:"원피스 극장판 시리즈",   categoryId:"animemov",itemCount:15, plannedCount:12,completedCount:3, avgRating:3.8, updatedAt:"2023-08-15" },
-  { id:"c4", name:"007 시리즈",             categoryId:"movie",   itemCount:25, plannedCount:20,completedCount:5, avgRating:3.5, updatedAt:"2023-12-20" },
-  { id:"c5", name:"마블 시네마틱 유니버스", categoryId:"movie",   itemCount:32, plannedCount:15,completedCount:17,avgRating:4.0, updatedAt:"2024-02-28" },
-  { id:"c6", name:"범죄도시 시리즈",        categoryId:"movie",   itemCount:4,  plannedCount:2, completedCount:2, avgRating:4.0, updatedAt:"2024-03-15" },
-  { id:"c7", name:"건담 시리즈",            categoryId:"anime",   itemCount:18, plannedCount:14,completedCount:4, avgRating:4.0, updatedAt:"2024-01-20" },
-  { id:"c8", name:"비밀의 숲",              categoryId:"kdrama",  itemCount:2,  plannedCount:0, completedCount:2, avgRating:5.0, updatedAt:"2023-12-15" },
-];
-
-const HISTORY: HistoryEntry[] = [
-  { id:"h1", selectedAt:"2024-03-10 14:23", itemId:"i4",  title:"더 글로리",                  categoryId:"kdrama", statusAtTime:"PLANNED", currentStatus:"COMPLETED", type:"ITEM" },
-  { id:"h2", selectedAt:"2024-03-05 20:15", itemId:"i19", title:"헌트",                       categoryId:"movie",  statusAtTime:"PLANNED", currentStatus:"COMPLETED", type:"ITEM" },
-  { id:"h3", selectedAt:"2024-02-22 18:40", collectionId:"c5", title:"마블 시네마틱 유니버스", categoryId:"movie",  statusAtTime:"PLANNED", currentStatus:"PLANNED",   type:"COLLECTION" },
-  { id:"h4", selectedAt:"2024-02-15 21:00", itemId:"i30", title:"리갈 하이",                  categoryId:"jdrama", statusAtTime:"PLANNED", currentStatus:"COMPLETED", type:"ITEM" },
-  { id:"h5", selectedAt:"2024-02-08 19:30", itemId:"i14", title:"응답하라 1988",              categoryId:"kdrama", statusAtTime:"COMPLETED",currentStatus:"COMPLETED", type:"ITEM" },
-];
-
-const TMDB_RESULTS: TMDBResult[] = [
-  {
-    id:1, title:"서울의 봄", originalTitle:"12.12: The Day",
-    type:"MOVIE", releaseDate:"2023-11-22", country:"KR", rating:8.1,
-    genres:["드라마","역사","스릴러"], runtime:141,
-    cast:["황정민","정우성","이성민","박해준","김성균"],
-    overview:"1979년 12월 12일, 수도 서울에서 일어난 군사 반란의 그날 밤, 권력을 향한 욕망과 이를 막으려는 자들 사이의 9시간을 그린 작품.",
-    poster:"https://images.unsplash.com/photo-1510987836583-e3fb9586c7b3?w=300&h=450&fit=crop&auto=format",
-    alreadyAdded:true,
-  },
-  {
-    id:2, title:"콘크리트 유토피아", originalTitle:"Concrete Utopia",
-    type:"MOVIE", releaseDate:"2023-08-09", country:"KR", rating:7.3,
-    genres:["드라마","스릴러"], runtime:130,
-    cast:["이병헌","박서준","박보영","김선영"],
-    overview:"대지진으로 폐허가 된 서울에서 유일하게 살아남은 황궁 아파트. 생존자들이 모여들면서 아파트 안에 새로운 세계가 펼쳐진다.",
-    poster:"https://images.unsplash.com/photo-1783129487138-8c1f440ce174?w=300&h=450&fit=crop&auto=format",
-    alreadyAdded:true,
-  },
-  {
-    id:3, title:"오펜하이머", originalTitle:"Oppenheimer",
-    type:"MOVIE", releaseDate:"2023-07-21", country:"US", rating:8.4,
-    genres:["드라마","역사","스릴러"], runtime:180,
-    cast:["킬리언 머피","에밀리 블런트","맷 데이먼","로버트 다우니 주니어"],
-    overview:"이론 물리학자 J. 로버트 오펜하이머의 이야기. 제2차 세계 대전 중 원자폭탄 개발 프로젝트인 맨해튼 프로젝트를 이끈 과정을 담았다.",
-    poster:"https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=300&h=450&fit=crop&auto=format",
-    alreadyAdded:true,
-  },
-  {
-    id:4, title:"패스트 라이브즈", originalTitle:"Past Lives",
-    type:"MOVIE", releaseDate:"2023-01-20", country:"US", rating:7.9,
-    genres:["드라마","로맨스"], runtime:106,
-    cast:["그레타 리","유태오","존 마가로"],
-    overview:"어릴 때 서울에서 헤어진 두 사람이 20년 만에 뉴욕에서 재회하며 이루지 못한 사랑과 삶의 선택에 대해 이야기하는 감성적인 드라마.",
-    poster:"https://images.unsplash.com/photo-1588312744377-2adfb7b8578a?w=300&h=450&fit=crop&auto=format",
-    alreadyAdded:true,
-  },
-  {
-    id:5, title:"이니셰린의 밴시", originalTitle:"The Banshees of Inisherin",
-    type:"MOVIE", releaseDate:"2022-10-21", country:"IE", rating:7.7,
-    genres:["드라마","코미디"], runtime:114,
-    cast:["콜린 파렐","브렌단 글리슨","배리 케오한"],
-    overview:"아일랜드의 작은 섬에서 평생 친구였던 두 남자가 갑작스런 우정의 파국을 맞이하면서 벌어지는 이야기를 블랙 코미디로 담았다.",
-    poster:"https://images.unsplash.com/photo-1672761303639-3fd08db84dc0?w=300&h=450&fit=crop&auto=format",
-    alreadyAdded:true,
-  },
-  {
-    id:6, title:"오징어 게임 시즌 2", originalTitle:"Squid Game: Season 2",
-    type:"TV", releaseDate:"2024-12-26", country:"KR", rating:7.2,
-    genres:["드라마","스릴러","액션"], seasons:2,
-    cast:["이정재","이병헌","위하준","임시완"],
-    overview:"456명의 참가자들이 목숨을 건 서바이벌 게임에 참여하는 이야기의 두 번째 시즌. 기훈이 게임에 다시 도전한다.",
-    alreadyAdded:false,
-  },
-  {
-    id:7, title:"탑건: 매버릭", originalTitle:"Top Gun: Maverick",
-    type:"MOVIE", releaseDate:"2022-05-27", country:"US", rating:8.3,
-    genres:["액션","드라마"], runtime:130,
-    cast:["톰 크루즈","마일스 텔러","제니퍼 코넬리"],
-    overview:"30년이 지난 후에도 여전히 현역 조종사로 활동하는 피트 매버릭 미첼이 다시 한번 위험한 임무를 맡게 되는 이야기.",
-    alreadyAdded:true,
-  },
-  {
-    id:8, title:"파친코", originalTitle:"Pachinko",
-    type:"TV", releaseDate:"2022-03-25", country:"KR", rating:8.1,
-    genres:["드라마","역사"], seasons:2,
-    cast:["윤여정","이민호","김민하","박진영"],
-    overview:"한국에서 일본으로 이주한 한 가족의 4대에 걸친 이야기를 다룬 서사 드라마. 애플TV+ 오리지널.",
-    poster:"https://images.unsplash.com/photo-1586165877141-3dbcfc059283?w=300&h=450&fit=crop&auto=format",
-    alreadyAdded:true,
-  },
-];
+import type { Page } from "./pageTypes";
+import type {
+  Status,
+  RecommendStep,
+  Candidate,
+  Category,
+  Item,
+  Collection,
+  HistoryEntry,
+  TMDBResult,
+  ImportStep,
+} from "../types/mock";
+import {
+  CATEGORIES,
+  ITEMS,
+  COLLECTIONS,
+  HISTORY,
+  TMDB_RESULTS,
+  MOCK_FILE,
+} from "../mocks/data";
+import AppLayout from "./layout/AppLayout";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1985,8 +1816,6 @@ function HistoryPage({ navigateToHistory }: { navigateToHistory: (h: HistoryEntr
 
 // ─── Data Page (with import flow) ────────────────────────────────────────────
 
-type ImportStep = "select" | "validate" | "preview" | "confirm" | "result";
-const MOCK_FILE = { filename:"picknext-backup-20240301.json", size:"2.4 MB", exportedAt:"2024-03-01 09:15", appVersion:"1.0.0", schemaVersion:"v2.1", user:"minjun@example.com", categories:10, collections:8, items:7202, history:47, status:"ok" as const };
 
 function DataPage() {
   const [importStep, setImportStep] = useState<ImportStep>("select");
@@ -2249,29 +2078,6 @@ function SettingsPage({ setPage }: { setPage: (p: Page) => void }) {
   );
 }
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
-
-const NAV: { id: Page; label: string; icon: ReactNode }[] = [
-  { id:"home",        label:"홈",         icon:<Home size={17}/> },
-  { id:"search",      label:"콘텐츠 검색", icon:<Search size={17}/> },
-  { id:"recommend",   label:"랜덤 추천",   icon:<Shuffle size={17}/> },
-  { id:"items",       label:"전체 항목",   icon:<List size={17}/> },
-  { id:"collections", label:"Collection", icon:<Folder size={17}/> },
-  { id:"history",     label:"추천 이력",   icon:<Clock size={17}/> },
-  { id:"data",        label:"데이터 관리", icon:<Database size={17}/> },
-  { id:"settings",    label:"설정",        icon:<Settings size={17}/> },
-];
-const MOBILE_NAV  = NAV.slice(0, 4);
-const MORE_NAV    = NAV.slice(4);
-const TOP_PAGES   = new Set<Page>(["item-detail","history-detail","category-manage"]);
-
-const TITLES: Record<Page, string> = {
-  home:"홈", search:"영화·드라마 검색", recommend:"랜덤 추천",
-  items:"전체 항목", collections:"Collection", history:"추천 이력",
-  data:"데이터 관리", settings:"설정",
-  "item-detail":"항목 상세", "history-detail":"추천 이력 상세", "category-manage":"Category 관리",
-};
-
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -2279,7 +2085,6 @@ export default function App() {
   const [selectedItem, setSelectedItem]       = useState<Item | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<HistoryEntry | null>(null);
   const [recommendCats, setRecommendCats]     = useState<string[]>([]);
-  const [moreOpen, setMoreOpen]               = useState(false);
   const [toast, setToast]                     = useState<string | null>(null);
   const [addItemOpen, setAddItemOpen]         = useState(false);
   const [editItemTarget, setEditItemTarget]   = useState<Item | null>(null);
@@ -2294,8 +2099,6 @@ export default function App() {
   const navigateToRecommend = (cats: string[]) => { setRecommendCats(cats); setPage("recommend"); };
   const openAddItem = () => { setEditItemTarget(null); setAddItemOpen(true); };
   const openEditItem = (item: Item) => { setEditItemTarget(item); setAddItemOpen(true); };
-
-  const navTo = (p: Page) => { setPage(p); setMoreOpen(false); };
 
   const renderPage = () => {
     switch (page) {
@@ -2313,120 +2116,11 @@ export default function App() {
     }
   };
 
-  const activeNavId = TOP_PAGES.has(page) ? null : page;
-
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 bg-sidebar border-r border-sidebar-border flex-shrink-0">
-        <div className="px-4 py-5 border-b border-sidebar-border">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
-              <Target size={15} className="text-white"/>
-            </div>
-            <div>
-              <div className="font-bold text-sidebar-foreground text-sm leading-tight">PickNext</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">고민하지 말고, 다음 선택은</div>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {NAV.map(item => (
-            <button key={item.id} onClick={() => navTo(item.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeNavId===item.id?"bg-sidebar-accent text-sidebar-accent-foreground":"text-sidebar-foreground hover:bg-sidebar-accent/50"}`}>
-              <span className={activeNavId===item.id?"text-primary":"text-muted-foreground"}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <div className="px-4 py-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
-              <User size={14} className="text-primary"/>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-sidebar-foreground truncate">박민준</div>
-              <div className="text-[10px] text-muted-foreground truncate">minjun@example.com</div>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
-        <header className="flex items-center justify-between px-4 sm:px-6 py-3 bg-card border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="lg:hidden flex items-center gap-2">
-              <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
-                <Target size={13} className="text-white"/>
-              </div>
-              <span className="font-bold text-foreground text-sm">PickNext</span>
-            </div>
-            <h1 className="text-sm font-semibold text-foreground lg:block hidden">{TITLES[page]}</h1>
-            <span className="lg:hidden text-sm font-semibold text-foreground">{TITLES[page]}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors">
-              <Search size={15}/>
-            </button>
-            <button onClick={openAddItem}
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs bg-primary text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition-colors font-medium">
-              <Plus size={13}/> 항목 추가
-            </button>
-          </div>
-        </header>
-
-        {/* Main */}
-        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {renderPage()}
-        </main>
-
-        {/* Mobile Bottom Nav */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border px-1 py-1.5 z-40">
-          <div className="flex">
-            {MOBILE_NAV.map(item => (
-              <button key={item.id} onClick={() => { navTo(item.id); }}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-1 rounded-xl transition-colors ${activeNavId===item.id&&!moreOpen?"text-primary":"text-muted-foreground"}`}>
-                {item.icon}
-                <span className="text-[9px] font-medium">
-                  {item.id==="search"?"검색":item.id==="recommend"?"추천":item.id==="items"?"항목":item.label}
-                </span>
-              </button>
-            ))}
-            <button onClick={() => setMoreOpen(!moreOpen)}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-1 rounded-xl transition-colors ${moreOpen?"text-primary":"text-muted-foreground"}`}>
-              <MoreHorizontal size={20}/>
-              <span className="text-[9px] font-medium">더보기</span>
-            </button>
-          </div>
-        </nav>
-
-        {/* More Sheet */}
-        {moreOpen && (
-          <div className="lg:hidden fixed inset-0 z-50" onClick={() => setMoreOpen(false)}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"/>
-            <div className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl" onClick={e=>e.stopPropagation()}>
-              <div className="w-8 h-1 bg-border rounded-full mx-auto mt-3 mb-4"/>
-              <div className="px-3 pb-8 space-y-0.5">
-                {MORE_NAV.map(item => (
-                  <button key={item.id} onClick={() => navTo(item.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-muted transition-colors">
-                    <span className="text-muted-foreground">{item.icon}</span>
-                    <span className="text-sm font-medium text-foreground">{item.label}</span>
-                    <ChevronRight size={14} className="text-muted-foreground ml-auto"/>
-                  </button>
-                ))}
-                <div className="border-t border-border mt-2 pt-2">
-                  <button className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-red-50 transition-colors">
-                    <LogOut size={16} className="text-red-500"/><span className="text-sm font-medium text-red-500">로그아웃</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <AppLayout currentPage={page} onNavigate={setPage} onAddItem={openAddItem}>
+        {renderPage()}
+      </AppLayout>
 
       {/* Global: Item Form Modal */}
       {addItemOpen && (

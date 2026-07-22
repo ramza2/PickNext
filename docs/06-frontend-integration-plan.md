@@ -1,48 +1,68 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** 1단계 완료 — 실행·빌드 확인, 구조 분석, 연동 계획  
+> **상태:** Frontend Phase B-1 구조 준비 완료  
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (이번 단계):** API 전면 연동, App.tsx 전면 리팩터링, UI 재설계
+> **비범위 (이번 단계):** 실제 API 화면 연동, Loading·Error UI, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
 | 항목 | 결과 |
 | --- | --- |
-| 패키지 매니저 | npm (Node.js LTS 24.18.0) |
-| `npm install` | 성공 (288 packages) |
-| `npm run build` | **성공** (`vite build`, ~3.7s) |
+| 패키지 매니저 | npm (Node.js LTS) |
+| `npm install` | 성공 |
+| `npm run build` | **성공** (`vite build`) |
 | 산출물 | `frontend/dist/` |
 | Dev 서버 | `npm run dev` → `http://127.0.0.1:5173` |
+| Vite `/api` Proxy | `VITE_API_PROXY_TARGET` → `http://127.0.0.1:8002` (path rewrite 없음) |
 
-### 1단계에서 수정한 파일 (디자인 변경 없음)
+### Phase B-1에서 추가·변경한 파일 (디자인 변경 없음)
 
 | 파일 | 변경 |
 | --- | --- |
-| `package.json` | `react`/`react-dom`을 peer → **dependencies**로 이동, TypeScript·types 추가 |
-| `pnpm-workspace.yaml` | Linux-only `supportedArchitectures` 제거 (Windows 설치 가능) |
-| `tsconfig.json` | **신규** — Vite + React JSX 경로 alias |
-| `README.md` | placeholder → 실행 방법·구조 안내 |
+| `vite.config.ts` | `/api` Proxy 추가 (기존 plugin·alias 유지) |
+| `.env.example` | `VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET` |
+| `src/vite-env.d.ts` | Vite env 타입 |
+| `src/types/api.ts` | Backend 읽기 API DTO (`Api*` prefix) |
+| `src/types/mock.ts` | Figma Mock 전용 타입 |
+| `src/api/client.ts` | Native fetch + `ApiError` |
+| `src/api/query.ts` | Query string 직렬화 (`false`/`0` 유지) |
+| `src/api/catalog.ts` | `getSummary`/`getCategories`/`getItems`/`getItem` |
+| `src/mocks/data.tsx` | Mock 상수 이동 (값 불변) |
+| `src/app/pageTypes.ts` | `Page` union |
+| `src/app/layout/AppLayout.tsx` | Sidebar·Top Bar·Mobile Nav·More Sheet |
+| `src/app/App.tsx` | Mock/Layout import로 교체, 화면·모달 유지 |
 
 ## 2. 현재 코드 구조
 
 ```text
 frontend/
-├─ src/
-│  ├─ main.tsx                 # createRoot → App
-│  ├─ app/
-│  │  ├─ App.tsx               # ★ 단일 파일 (~2,446줄): 화면·Mock·상태 전부
-│  │  └─ components/
-│  │     ├─ figma/ImageWithFallback.tsx
-│  │     └─ ui/*               # shadcn/Radix 프리셋 (App.tsx에서 거의 미사용)
-│  ├─ styles/                  # Tailwind 4 + theme CSS 변수
-│  └─ imports/pasted_text/     # 디자인 스펙 메모
+├─ .env.example
 ├─ vite.config.ts
-└─ package.json
+└─ src/
+   ├─ main.tsx
+   ├─ vite-env.d.ts
+   ├─ api/
+   │  ├─ client.ts
+   │  ├─ query.ts
+   │  └─ catalog.ts
+   ├─ types/
+   │  ├─ api.ts
+   │  └─ mock.ts
+   ├─ mocks/
+   │  └─ data.tsx
+   ├─ app/
+   │  ├─ App.tsx               # 화면·모달·Mock 기반 상태
+   │  ├─ pageTypes.ts
+   │  ├─ layout/AppLayout.tsx
+   │  └─ components/
+   └─ styles/
 ```
 
 라우팅은 **react-router 미사용**. `useState<Page>`로 화면 전환.
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
+
+**화면은 여전히 Mock 데이터로 동작한다.** API 함수는 준비만 되어 있으며 Page에서 호출하지 않는다.
 
 ## 3. 화면 목록
 
@@ -69,7 +89,7 @@ frontend/
 - `Toast` — 하단 토스트
 - Mobile More Sheet — 하단 네비 「더보기」
 
-레이아웃 (App 루트):
+레이아웃 (`AppLayout`):
 
 - Desktop Sidebar (`lg:`)
 - Top Bar
@@ -99,16 +119,16 @@ frontend/
 
 ## 5. Mock 데이터
 
-| 상수 | 규모 | 용도 |
-| --- | --- | --- |
-| `CATEGORIES` | 10개 | Seed Category와 이름 일치, id는 `movie`/`kdrama` 등 문자열 |
-| `ITEMS` | 40건 | 목록·추천·상세·홈 요약 |
-| `COLLECTIONS` | 8개 | Collection 목록·추천 후보 |
-| `HISTORY` | 5건 | 추천 이력 |
-| `TMDB_RESULTS` | 8건 | 검색 Mock (Unsplash 포스터 URL) |
-| `MOCK_FILE` | 1건 | Export/Import UI 데모 (items: 7202) |
+| 상수 | 위치 | 규모 | 용도 |
+| --- | --- | --- | --- |
+| `CATEGORIES` | `src/mocks/data.tsx` | 10개 | Seed Category와 이름 일치, id는 `movie`/`kdrama` 등 문자열 |
+| `ITEMS` | 〃 | 40건 | 목록·추천·상세·홈 요약 |
+| `COLLECTIONS` | 〃 | 8개 | Collection 목록·추천 후보 |
+| `HISTORY` | 〃 | 5건 | 추천 이력 |
+| `TMDB_RESULTS` | 〃 | 8건 | 검색 Mock (Unsplash 포스터 URL) |
+| `MOCK_FILE` | 〃 | 1건 | Export/Import UI 데모 (items: 7202) |
 
-홈 통계는 `CATEGORIES.reduce(...total)` 등 **Mock 배열 집계**를 사용한다. 실제 Backend 집계와 교체 필요.
+홈 통계는 `CATEGORIES.reduce(...total)` 등 **Mock 배열 집계**를 사용한다. 실제 Backend 집계와 교체는 Phase B-2.
 
 ## 6. 동작 / 미동작·허수 버튼
 
@@ -164,23 +184,24 @@ frontend/
 
 디자인을 바꾸지 않고 **Mock → API를 화면 단위로** 교체한다.
 
-### Phase A — 기반 (디자인 무변경)
+### Phase B-1 — 구조 준비 ✅ 완료
 
-1. Vite proxy: `/api` → Backend (`localhost:8002` 등)
-2. `src/api/client.ts`, `src/types/` (Backend DTO)
+1. Vite proxy: `/api` → Backend (`127.0.0.1:8002`)
+2. `src/api/client.ts`, `src/types/api.ts` (Backend DTO)
 3. Mock을 `src/mocks/`로 **이동만** (App에서 import) — 동작 동일
 4. `AppLayout` 추출 (Sidebar/Top/Bottom JSX·className 그대로)
+5. Catalog 읽기 함수 준비 (화면 미호출)
 
-### Phase B — 읽기 전용 연동
+### Phase B-2 — 읽기 API 점진 연결 (다음)
 
-> Backend Phase A-1 읽기 API는 구현됨 (`GET /summary`, `/categories`, `/items`).
+> Backend 읽기 API 구현 완료:  
+> `GET /api/v1/summary`, `/categories`, `/items`, `/items/{item_id}`
 
-5. Categories + Items 목록/상세 (Home·Items·ItemDetail Mock 교체)
-6. Collections 목록/상세
+5. Category + Summary + Item 목록/상세를 화면 단위로 Mock 교체  
+   (Home·Items·ItemDetail 우선)
+6. Collections 목록/상세 (Backend Collection 읽기 API 선행 필요 시 대기)
 7. History 목록/상세
-8. 홈 통계를 Backend 집계로 교체
-
-*선행:* Backend CRUD·집계 API 구현 (아직 없음 → Backend 작업과 병행)
+8. Loading·Error UI (최소)
 
 ### Phase C — 쓰기·추천·TMDB
 
@@ -197,20 +218,31 @@ frontend/
 16. Form 검증·API 오류 toast/배너
 17. Mock 잔여 제거 (단계적)
 
-### 권장 Backend 선행 순서
+### 현재 Backend 구현 완료 API
 
-1. Category·Item·Collection CRUD  
-2. Recommendation + History  
-3. TMDB Migration·프록시·from-tmdb (`docs/05-tmdb-integration-plan.md`)  
-4. Stats / Export
+```text
+GET /api/v1/summary
+GET /api/v1/categories
+GET /api/v1/items
+GET /api/v1/items/{item_id}
+```
+
+### 아직 Frontend 미완료
+
+- 실제 API 화면 연동
+- Loading·Error UI
+- Home / Items / Item Detail API 연동
+- Collection API 연동
+- React Router
+- App.tsx Page 분리
+- 쓰기 API / TMDB / 추천·이력
 
 ## 9. 위험 요소
 
 | 위험 | 설명 | 완화 |
 | --- | --- | --- |
-| App.tsx 단일 거대 파일 | 2,400+줄, 분리 시 디자인 회귀 | 화면 단위 복사 분리, 시각 비교 |
-| Backend API 미구현 | Frontend만 연동 불가 | Phase B 전 Backend CRUD 우선 |
-| Category id 불일치 | Mock `movie` vs UUID | 이름 매핑 또는 Seed 고정 UUID |
+| App.tsx 단일 거대 파일 | 2,000+줄, 분리 시 디자인 회귀 | 화면 단위 복사 분리, 시각 비교 |
+| Category id 불일치 | Mock slug(`movie`)와 API UUID 구조가 다름 | API에서 로드한 Category의 UUID를 사용하고, 빠른 추천 Preset만 Category 이름으로 런타임 Resolve. DB 관계·API 파라미터에는 항상 UUID를 쓰고, 이름은 Preset→UUID 변환에만 사용. Seed 고정 UUID는 사용하지 않음 |
 | react는 peer였음 | 설치 누락 가능 | dependencies로 수정 완료 |
 | shadcn vs raw Tailwind | 혼용 시 스타일 불일치 | App 기존 className 유지, shadcn 강제 적용 금지 |
 | StarPicker 0.5 | 기획과 불일치 | 최소 UI 보정, 색·크기 유지 |
@@ -219,12 +251,12 @@ frontend/
 | npm audit high | vite 관련 가능 | 디자인 단계에서는 강제 upgrade 보류 |
 | Docker Desktop 미기동 | Backend 연동 테스트 시 필요 | compose up 후 proxy |
 
-## 10. 다음 작업 순서 (중단 후 재개 시)
+## 10. 다음 작업 순서
 
-1. Docker Compose로 Backend Health 확인  
-2. Backend Category/Item 읽기 API (최소)  
-3. Frontend Phase A (proxy + mocks 분리 + AppLayout)  
-4. Home/Items를 읽기 API에 연결 (UI 동일)  
-5. 시각 회귀 확인 후 커밋
+```text
+Frontend Phase B-2
+Category + Summary + Item 목록 + Item 상세를
+화면 단위로 Backend 읽기 API에 점진 연결
+```
 
 **금지 유지:** 새 React 프로젝트, App 전면 재작성, Tailwind/색상 체계 교체, Mock 일괄 삭제.
