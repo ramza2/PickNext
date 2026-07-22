@@ -1,6 +1,6 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend·Frontend 연동 완료  
+**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend·Frontend 구현 및 D-8 안정화 완료
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
@@ -137,6 +137,14 @@ Index (현재):
 - Item 행 「제거」: Hard Delete 미연결 (연결 해제 미구현 Toast)
 - 검증: `npm run build`, `npx tsc --noEmit`, `node scripts/verify-delete-api.mjs`
 - **잔여:** POST·PATCH, Bulk 삭제, Vitest/RTL
+
+### 1.2.5 D-8 안정화 결과 (2026-07-22)
+
+- Backend pytest **128 passed**, 삭제 관련 **66 passed**
+- 격리 DB `picknext_d8_smoke` HTTP DELETE Smoke **28/28**
+- Seed 비파괴: `/summary`·DB 조회로 7202 / 249 / 10 / linked 845 전후 동일 (실DELETE 없음)
+- 보조 PowerShell JSON 파싱 명령은 셸 작성 문제로 exit 1 — API·Seed 데이터 이상 없음
+- 판정: **PASS WITH NOTES** (Desktop/Mobile 수동 시각 검증 권장)
 
 ### 1.3 Item 연관 테이블
 

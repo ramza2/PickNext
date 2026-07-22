@@ -1,6 +1,6 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7 Item·Collection 삭제 API 연동 완료  
+> **상태:** Frontend D-7 삭제 연동 완료 · **D-8 회귀·Smoke 검증 완료 (2026-07-22)**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
 > **비범위 (잔여):** Item/Collection POST·PATCH, History/추천/TMDB, React Router, App.tsx Page 분리
 
@@ -232,6 +232,7 @@ frontend/
 - Collection 상세 Item 행 「제거」: 연결 해제 미구현 Toast 유지 (Hard Delete 미연결)
 - origin(home/items/collections)별 복귀, Snapshot·페이지 보존, 마지막 페이지 보정
 - `scripts/verify-delete-api.mjs` (Fetch Mock)
+- D-8: Backend 격리 DB Smoke 28/28, Seed 비파괴, build/tsc 통과
 
 ### 다음 권장
 
@@ -277,7 +278,7 @@ DELETE /api/v1/collections/{collection_id}
 | Item 상세 | ✅ API · **삭제(D-7)** |
 | Collections 목록 | ✅ API (B-3a) |
 | Collections 인라인 상세 · 소속 Item | ✅ API (B-3b) · **Collection 삭제(D-7)** |
-| Item·Collection DELETE UI | ✅ D-7 |
+| Item·Collection DELETE UI | ✅ D-7 · D-8 Smoke 검증 |
 | History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
 | POST·PATCH·추천·TMDB API | 미완료 |

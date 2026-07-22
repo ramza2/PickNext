@@ -12,6 +12,7 @@ D-2 Schema: 2026-07-22 — `0004_remove_item_soft_delete` (`deleted_at` / `ix_it
 D-3~D-5: 2026-07-22 — Item Hard Delete 시 마지막 Item이면 Collection 자동 삭제.  
 D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard Delete / Item≥1 → 409 (Item unlink 없음).  
 D-7: 2026-07-22 — Frontend Collection·Item 삭제 Dialog 및 DELETE API 연동, `item_count > 0` 사전 차단, origin별 복귀.
+D-8: 2026-07-22 — 전체 회귀·격리 DB HTTP Smoke 28/28, Seed 비파괴 확인.
 
 근거: SQLAlchemy Model, Alembic `0001`~`0004`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 

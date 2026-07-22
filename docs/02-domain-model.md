@@ -100,5 +100,6 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 - Item 삭제는 **Hard Delete**다. `deleted_at` Soft Delete·복원·보관 개념은 없다.
 - `DELETE /api/v1/items/{item_id}` 구현 완료 (D-3~D-5): 추천 이력 전체 선삭제 → Item 삭제 → 마지막이면 Collection 자동 삭제
 - `DELETE /api/v1/collections/{collection_id}` 구현 완료 (D-6): Item **0건** → Collection Hard Delete / Item **1건 이상** → **409** (Item unlink·Cascade 없음)
+- Frontend DELETE Dialog·origin 복귀 연동 완료 (D-7), D-8 회귀·Smoke 검증 완료
 - RecommendationHistoryItem → Item은 `RESTRICT`
 - RecommendationHistoryItem → RecommendationHistory는 `CASCADE`
