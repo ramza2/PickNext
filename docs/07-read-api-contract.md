@@ -671,7 +671,7 @@ components:
 ## 13. 추후 확장 항목
 
 - TMDB 필드 (Migration 0004 이후)
-- Collection 목록·상세 읽기 API
+- Collection 목록·상세 읽기 API → **구현 완료** ([08-collection-read-api-contract](./08-collection-read-api-contract.md))
 - History 읽기 API (홈 최근 선택)
 - rating nullable / 미평가 구분
 - title trigram Index

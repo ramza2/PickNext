@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.models import CategoryType, ItemStatus, StatusFilter
-from app.services.catalog import ItemSort, SortOrder
+from app.services.catalog import CollectionSort, ItemSort, SortOrder
 
 
 class ORMModel(BaseModel):
@@ -97,6 +97,33 @@ class CollectionRef(BaseModel):
     name: str
 
 
+class CollectionCategoryCount(BaseModel):
+    id: UUID
+    name: str
+    item_count: int
+
+
+class CollectionResponse(BaseModel):
+    id: UUID
+    name: str
+    item_count: int
+    planned_count: int
+    completed_count: int
+    categories: list[CollectionCategoryCount]
+    created_at: datetime
+    updated_at: datetime
+
+
+class CollectionListResponse(BaseModel):
+    collections: list[CollectionResponse]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
+
+
 class ItemListItem(BaseModel):
     id: UUID
     title: str
@@ -132,8 +159,12 @@ __all__ = [
     "CategoryListResponse",
     "CategoryRef",
     "CategoryResponse",
+    "CollectionCategoryCount",
     "CollectionCreate",
+    "CollectionListResponse",
     "CollectionRef",
+    "CollectionResponse",
+    "CollectionSort",
     "HealthResponse",
     "ItemCreate",
     "ItemDetailResponse",

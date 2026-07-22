@@ -320,5 +320,7 @@ def test_openapi_includes_read_paths(api_client: TestClient) -> None:
     paths = api_client.get("/openapi.json").json()["paths"]
     assert "/api/v1/summary" in paths
     assert "/api/v1/categories" in paths
+    assert "/api/v1/collections" in paths
+    assert "/api/v1/collections/{collection_id}" in paths
     assert "/api/v1/items" in paths
     assert "/api/v1/items/{item_id}" in paths
