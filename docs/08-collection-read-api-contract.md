@@ -2,7 +2,7 @@
 
 > **상태:** **Backend 읽기·삭제·Collection POST/PATCH 구현 완료 · Frontend 목록·상세·삭제 연동 완료**
 > **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현, Frontend 목록·상세 연동  
-> **비범위:** Collection Frontend 생성·수정, Item POST/PATCH, Index 추가
+> **비범위:** Item POST/PATCH, Index 추가
 
 검증 일시: 2026-07-22 (개발 PostgreSQL `picknext`, 읽기 전용).  
 구현 검증: 2026-07-22 — 자동 테스트 + OpenAPI + Seed Smoke Test 완료.  
@@ -13,7 +13,8 @@ D-3~D-5: 2026-07-22 — Item Hard Delete 시 마지막 Item이면 Collection 자
 D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard Delete / Item≥1 → 409 (Item unlink 없음).  
 D-7: 2026-07-22 — Frontend Collection·Item 삭제 Dialog 및 DELETE API 연동, `item_count > 0` 사전 차단, origin별 복귀.
 D-8: 2026-07-22 — 전체 회귀·격리 DB HTTP Smoke 28/28, Seed 비파괴 확인.
-C-1: 2026-07-22 — `POST`/`PATCH /api/v1/collections` Backend 구현. Frontend 생성·수정 연동 대기.
+C-1: 2026-07-22 — `POST`/`PATCH /api/v1/collections` Backend 구현.
+C-2: 2026-07-22 — Collection 생성·수정 Frontend Dialog·API 연동 (생성 후 상세 진입, 409 Inline).
 
 근거: SQLAlchemy Model, Alembic `0001`~`0004`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 
@@ -31,7 +32,7 @@ C-1: 2026-07-22 — `POST`/`PATCH /api/v1/collections` Backend 구현. Frontend 
 | 소속 Item `GET /items?collection_id=&sort=title&order=asc` | **연동 완료** · 기본 `page_size` · Item 영역 페이지네이션 |
 | 부분 실패 | Collection 성공+Item 실패 → 메타 유지·Item 재시도 / Collection 실패·404 → Item 미표시 |
 | Item 상세 복귀 | `origin=collections` · Collection ID·Item page 복원 · `collectionsSnapshot` 유지 |
-| Collection 쓰기 | Item·Collection **DELETE FE 연동 완료 (D-7)** / **POST·PATCH Backend 완료 (C-1)** / Frontend 생성·수정 **대기** |
+| Collection 쓰기 | Item·Collection **DELETE FE (D-7)** · **POST·PATCH BE·FE (C-1/C-2)** 완료 |
 | 구현 파일 | `getCollection`, `useCollectionDetail`, `useCollectionItemsReadData`, `CollectionDetailInline` |
 
 ```text

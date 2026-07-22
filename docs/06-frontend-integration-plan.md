@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · **C-1 Collection POST/PATCH Backend 완료 (2026-07-22)**
+> **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · C-1 Collection POST/PATCH Backend 완료 · **C-2 Collection 생성·수정 Frontend 연동 완료 (2026-07-22)**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (잔여):** Collection·Item Frontend 생성·수정, Item POST/PATCH, History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (잔여):** Item Frontend 생성·수정, Item POST/PATCH, History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -237,16 +237,23 @@ frontend/
 ### 다음 권장
 
 ```text
-Collection Frontend 생성·수정 Dialog 연동
-Item POST/PATCH (생성·수정·상태·연결 해제)
+Item POST/PATCH Backend·Frontend (생성·수정·상태·연결 해제)
 ```
 
 ### Phase C-1 — Collection POST/PATCH Backend ✅ 완료 (2026-07-22)
 
 - `POST /api/v1/collections` — 201 + `CollectionResponse`, Trim·200자·동일 사용자 409
 - `PATCH /api/v1/collections/{collection_id}` — 200 + `CollectionResponse`, FOR UPDATE·no-op·409
-- Frontend 생성·수정 UI는 **미연동** (후속)
 - D-6 DELETE 계약 회귀 유지 (pytest 159 passed)
+
+### Phase C-2 — Collection 생성·수정 Frontend ✅ 완료 (2026-07-22)
+
+- `createCollection` / `updateCollection` API Client
+- `CollectionFormModal` (생성·수정 공용, Trim·200자 Validation, Pending·409 Inline)
+- 생성 성공 → 새 Collection 상세 진입 + 목록 Reload + Toast
+- 수정 성공 → 상세 유지 + Header·목록 Reload + Toast
+- PATCH 404 → 목록 복귀, DELETE 연계·Item 「제거」 회귀 유지
+- `scripts/verify-collection-write-api.mjs` · verify-delete-api · tsc · build 통과
 
 ### Phase C — 쓰기·추천·TMDB
 
@@ -289,10 +296,11 @@ DELETE /api/v1/collections/{collection_id}
 | Collections 목록 | ✅ API (B-3a) |
 | Collections 인라인 상세 · 소속 Item | ✅ API (B-3b) · **Collection 삭제(D-7)** |
 | Item·Collection DELETE UI | ✅ D-7 · D-8 Smoke 검증 |
-| Collection POST/PATCH Backend | ✅ C-1 (Frontend 연동 대기) |
+| Collection POST/PATCH Backend | ✅ C-1 |
+| Collection 생성·수정 UI | ✅ C-2 |
 | History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
-| Item POST/PATCH·Frontend Collection 생성·수정 | 미완료 |
+| Item POST/PATCH·Frontend Item 생성·수정 | 미완료 |
 
 ## 9. 위험 요소
 
@@ -311,7 +319,7 @@ DELETE /api/v1/collections/{collection_id}
 ## 10. 다음 작업 순서
 
 ```text
-Collection Frontend 생성·수정 연동 — Item POST/PATCH Backend
+Item POST/PATCH Backend·Frontend — Phase C
 ```
 
 **금지 유지:** 새 React 프로젝트, App 전면 재작성, Tailwind/색상 체계 교체, Mock 일괄 삭제.

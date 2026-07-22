@@ -1,6 +1,6 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend·Frontend 구현 및 D-8 안정화 완료 · **Collection POST/PATCH Backend 구현 완료 (C-1)**
+**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend·Frontend 구현 및 D-8 안정화 완료 · Collection POST/PATCH Backend·Frontend 구현 완료 (C-1/C-2)
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
@@ -8,8 +8,9 @@
 **D-6 구현:** 2026-07-22 — `DELETE /api/v1/collections/{collection_id}` (Item≥1 → 409)  
 **D-7 구현:** 2026-07-22 — Frontend Item·Collection DELETE Dialog·API Client·origin별 복귀  
 **C-1 구현:** 2026-07-22 — `POST`/`PATCH /api/v1/collections` (이름 Trim·Unique·no-op)
-**범위:** Collection·Item 쓰기 계약 분석 + Item·Collection Hard Delete Backend·Frontend 삭제 연동 + Collection 생성·이름 수정 Backend
-**비범위:** Item POST/PATCH, Collection Frontend 생성·수정
+**C-2 구현:** 2026-07-22 — Frontend Collection 생성·수정 Dialog·API Client·409 Inline
+**범위:** Collection·Item 쓰기 계약 분석 + Item·Collection Hard Delete Backend·Frontend 삭제 연동 + Collection 생성·이름 수정 Backend·Frontend
+**비범위:** Item POST/PATCH
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -126,7 +127,7 @@ Index (현재):
 - Collection `updated_at` Touch 없음 (409 포함)
 - 테스트: `tests/test_collection_delete_api.py`
 - Backend 전체 **128 passed** (D-6 검증 2026-07-22)
-- **잔여:** Item POST/PATCH, Collection Frontend 생성·수정
+- **잔여:** Item POST/PATCH
 
 ### 1.2.4 D-7 Frontend 구현 결과 (2026-07-22)
 
@@ -187,7 +188,7 @@ Migration 전제: Soft Delete 행 0건. 행이 발견되면 **자동 Hard Delete
 
 **D-7 완료 (2026-07-22):** Item·Collection Hard Delete — Confirm Dialog + `deleteItem`/`deleteCollection` API Client. origin별 복귀·재조회, Collection `item_count > 0` 사전 Toast, Backend 409 재조회. Collection 상세 Item 「제거」는 연결 해제 미구현 Toast 유지.
 
-**미연동:** Item POST/PATCH, Collection Frontend 생성·수정, 상태 전환, Collection 연결 해제, Bulk 삭제.
+**미연동:** Item POST/PATCH, 상태 전환, Collection 연결 해제, Bulk 삭제.
 
 Frontend DTO에 `deleted_at` **없음**. “복원” 문구는 **백업 Import RESTORE**용이며 Item Soft Delete 복원과 무관.
 
@@ -206,7 +207,6 @@ Frontend DTO에 `deleted_at` **없음**. “복원” 문구는 **백업 Import 
 **미구현**
 
 - Item POST/PATCH
-- Collection Frontend 생성·수정
 - 읽기 Service `catalog.py`는 Soft Delete 필터 없이 `Item.user_id` 범위만 사용 (D-2 완료).
 
 ---
@@ -244,6 +244,20 @@ Request Schema: `CollectionCreate` (`name` 필수, 공통 `_normalize_collection
 | 응답 | 200 + `CollectionResponse` (기존 Item 집계 유지) |
 
 Request Schema: `CollectionUpdate`. 테스트: `tests/test_collection_write_api.py` (31건). Backend 전체 **159 passed**.
+
+### 6.1 C-2 Frontend 연동 (2026-07-22)
+
+| 항목 | 구현 |
+|------|------|
+| API Client | `createCollection`, `updateCollection` (`catalog.ts`) |
+| Dialog | `CollectionFormModal` — 생성·수정 공용, Trim·1~200자, `{length}/200` |
+| 생성 UX | 목록 「추가」→ POST 201 → 상세 진입, 목록 Reload, Toast |
+| 수정 UX | 상세 연필 → PATCH 200 → 상세 유지, Header·목록 Reload |
+| no-op | 동일 이름 저장 Disabled, PATCH 미호출 |
+| 409 | Inline Error (Toast 중복 없음) |
+| 404 PATCH | Toast + 목록 복귀 |
+| 5xx/Network | Toast, Dialog·입력 유지 |
+| 검증 | `verify-collection-write-api.mjs`, `verify-delete-api.mjs`, tsc, build |
 
 ---
 
