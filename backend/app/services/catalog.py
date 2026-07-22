@@ -1,4 +1,4 @@
-"""Catalog queries: summary, categories, items, collections (read + item delete)."""
+"""Catalog queries: summary, categories, items, collections (read + delete)."""
 
 from __future__ import annotations
 
@@ -331,6 +331,78 @@ def delete_item(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Conflict while deleting item",
+        ) from None
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
+def delete_collection(
+    db: Session,
+    user: User,
+    collection_id: UUID,
+    *,
+    commit: bool = True,
+) -> None:
+    """Hard-delete an empty collection owned by the user.
+
+    Transaction order (single commit when ``commit=True``):
+    1. Collection SELECT FOR UPDATE
+    2. Item EXISTS (any row referencing collection_id)
+    3. Collection DELETE when no items (legacy_import_collections CASCADE;
+       recommendation_history.collection_id SET NULL via DB FK)
+
+    Item POST/PATCH that attach or move to a collection should lock the target
+    Collection row (FOR UPDATE) after validating ownership to serialize with
+    this path and Item DELETE.
+
+    ``commit=False`` is for tests that wrap mutations in their own SAVEPOINT.
+    """
+    collection = db.scalar(
+        select(Collection)
+        .where(Collection.id == collection_id, Collection.user_id == user.id)
+        .with_for_update()
+    )
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Collection not found",
+        )
+
+    has_items = db.scalar(select(exists().where(Item.collection_id == collection_id)))
+    if has_items:
+        wrong_owner = db.scalar(
+            select(
+                exists().where(
+                    Item.collection_id == collection_id,
+                    Item.user_id != collection.user_id,
+                )
+            )
+        )
+        if wrong_owner:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Data integrity error",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Collection contains items",
+        )
+
+    try:
+        db.delete(collection)
+        db.flush()
+        if commit:
+            db.commit()
+    except HTTPException:
+        raise
+    except IntegrityError:
+        if commit:
+            db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Collection contains items",
         ) from None
     except Exception:
         if commit:

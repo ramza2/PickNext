@@ -1,15 +1,16 @@
 # 08. Collection 읽기 API 계약
 
-> **상태:** **Backend 구현 완료 · Frontend 목록·상세 연동 완료 · Soft Delete Schema 제거(D-2) · Item Hard Delete(D-3~D-5) · Collection 직접 DELETE 대기(D-6)**  
+> **상태:** **Backend 구현 완료 · Frontend 목록·상세 연동 완료 · Soft Delete Schema 제거(D-2) · Item Hard Delete(D-3~D-5) · Collection 직접 DELETE(D-6)**  
 > **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현, Frontend 목록·상세 연동  
-> **비범위:** Collection 직접 DELETE/POST/PATCH, Item POST/PATCH, Index 추가
+> **비범위:** Collection POST/PATCH, Item POST/PATCH, Index 추가
 
 검증 일시: 2026-07-22 (개발 PostgreSQL `picknext`, 읽기 전용).  
 구현 검증: 2026-07-22 — 자동 테스트 + OpenAPI + Seed Smoke Test 완료.  
 Frontend 목록 연동: 2026-07-22 — B-3a.  
 Frontend 상세 연동: 2026-07-22 — B-3b (`useCollectionDetail`, `useCollectionItemsReadData`).  
 D-2 Schema: 2026-07-22 — `0004_remove_item_soft_delete` (`deleted_at` / `ix_items_active` 제거).  
-D-3~D-5: 2026-07-22 — Item Hard Delete 시 마지막 Item이면 Collection 자동 삭제. **Collection 직접 DELETE는 미구현.**
+D-3~D-5: 2026-07-22 — Item Hard Delete 시 마지막 Item이면 Collection 자동 삭제.  
+D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard Delete / Item≥1 → 409 (Item unlink 없음).
 
 근거: SQLAlchemy Model, Alembic `0001`~`0004`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 
@@ -505,7 +506,8 @@ Offset. `total_pages = ceil(total / page_size)` (total=0 → 0).
 - 마지막 Item DELETE 시 소속 Collection도 같은 Transaction에서 Hard Delete → 상세/목록에서 Collection 404
 - PATCH 연결 해제·이동으로 빈 Collection이 된 경우는 **유지** (해당 PATCH는 미구현)
 - Collection 자체 soft delete 없음
-- **Collection 직접 DELETE** (빈 Collection만 허용 / Item 있으면 409)는 **D-6 미구현**
+- **Collection 직접 DELETE** (D-6): `DELETE /api/v1/collections/{id}` — Item **0건** → **204** Hard Delete / Item **1건 이상** → **409** / 타 사용자·미존재 → **404**
+- 마지막 Item DELETE로 Collection 자동 삭제(D-3~D-5)와 구분: Collection 직접 DELETE는 Item 존재 시 **409만** 반환 (Item unlink·Cascade 없음)
 
 
 ## 11. 오류와 사용자 접근 정책

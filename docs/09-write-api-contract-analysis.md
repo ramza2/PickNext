@@ -6,7 +6,7 @@
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
 **D-3~D-5 구현:** 2026-07-22 — `DELETE /api/v1/items/{item_id}` Hard Delete Transaction  
 **범위:** Collection·Item 쓰기 계약 분석 + Item Hard Delete 구현  
-**비범위:** Collection 직접 DELETE(D-6), Item/Collection POST·PATCH, Frontend 쓰기  
+**비범위:** Item/Collection POST·PATCH, Frontend 쓰기  
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -109,9 +109,21 @@ Index (현재):
 - Collection `updated_at` Touch 없음
 - 테스트: `tests/test_item_hard_delete_api.py` + FK Schema 검증
 - Backend 전체 **112 passed**
-- **D-6 대기:** Collection 직접 DELETE + Item≥1 → 409
+- **D-6 완료:** Collection 직접 DELETE + Item≥1 → 409
 
 `completed_at`·TMDB 컬럼: **없음**. TMDB 계획 Migration 번호는 `docs/10`에서 조정.
+
+### 1.2.3 D-6 구현 결과 (2026-07-22)
+
+- Endpoint: `DELETE /api/v1/collections/{collection_id}` → **204** (Body 없음)
+- Service: `catalog.delete_collection` — Collection `FOR UPDATE` → Item `EXISTS` → Item 있으면 **409** → 빈 Collection `DELETE` → `commit`
+- RecommendationHistory: DB `ON DELETE SET NULL` (History 부모·Items 유지)
+- Legacy Mapping: DB CASCADE (Service 미호출)
+- IntegrityError(FK RESTRICT 등) → rollback 후 **409** `Collection contains items`
+- Collection `updated_at` Touch 없음 (409 포함)
+- 테스트: `tests/test_collection_delete_api.py`
+- Backend 전체 **128 passed** (D-6 검증 2026-07-22)
+- **잔여:** Collection POST/PATCH, Item POST/PATCH, Frontend 삭제 연동
 
 ### 1.3 Item 연관 테이블
 
@@ -187,9 +199,9 @@ HTTP 쓰기 Router **없음**. `get_db` auto-commit 없음.
 
 ---
 
-## 7. Collection 직접 삭제 (확정)
+## 7. Collection 직접 삭제 (구현 완료 — D-6)
 
-후보: `DELETE /api/v1/collections/{collection_id}`
+`DELETE /api/v1/collections/{collection_id}`
 
 | 조건 | 응답 |
 |------|------|
@@ -197,10 +209,12 @@ HTTP 쓰기 Router **없음**. `get_db` auto-commit 없음.
 | Item 1건 이상 | **409 Conflict** |
 | 타 사용자·미존재 | **404** |
 | UUID 형식 오류 | **422** |
+| 동시 Item 연결 FK 충돌 | **409** (rollback) |
 
 - Item을 **자동 연결 해제하지 않음**.
-- Soft Delete 조건 없음 (Migration 후 = 존재하는 모든 Item).
-- 검사와 DELETE는 **한 Transaction**.
+- RecommendationHistory **전체 삭제하지 않음** (`collection_id` SET NULL).
+- Soft Delete 조건 없음.
+- 검사와 DELETE는 **한 Transaction** (`Collection FOR UPDATE` → `EXISTS` → DELETE).
 
 **폐기:** 이전 분석의 Collection 삭제 A안(unlink 후 삭제)·C안(Collection Soft Delete)·D안(Item Cascade).
 

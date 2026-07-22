@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -48,3 +48,23 @@ def read_collection_detail(
     user: User = Depends(get_current_user),
 ) -> CollectionResponse:
     return CollectionResponse(**catalog.get_collection_detail(db, user, collection_id))
+
+
+@router.delete(
+    "/collections/{collection_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+    responses={
+        404: {"description": "Collection not found"},
+        409: {"description": "Collection contains items"},
+        422: {"description": "Validation Error"},
+    },
+)
+def delete_collection(
+    collection_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    catalog.delete_collection(db, user, collection_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
