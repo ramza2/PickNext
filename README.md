@@ -291,3 +291,4 @@ pytest -q
 | `docs/03-recommendation-rules.md` | 추천 규칙 |
 | `docs/04-legacy-migration.md` | Legacy Import·보정 |
 | `docs/05-tmdb-integration-plan.md` | TMDB 검색·등록 기획 |
+| `docs/06-frontend-integration-plan.md` | Figma Frontend 분석·API 연동 계획 |

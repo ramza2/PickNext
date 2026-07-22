@@ -48,6 +48,8 @@ Thumbs.db
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/PickNext.zip
+
 
 # Docker / local data
 *.log
