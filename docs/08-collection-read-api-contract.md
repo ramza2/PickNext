@@ -1,27 +1,36 @@
 # 08. Collection 읽기 API 계약
 
-> **상태:** **Backend 구현 완료 · Frontend 목록 연동 완료 · Frontend 상세 연동 대기**  
-> **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현, Frontend 목록 연동  
-> **비범위:** Frontend 상세·Item 연동, Migration, Index 추가, 쓰기 API
+> **상태:** **Backend 구현 완료 · Frontend 목록·상세 연동 완료 · 쓰기 기능 대기**  
+> **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현, Frontend 목록·상세 연동  
+> **비범위:** Collection·Item 쓰기, Migration, Index 추가
 
 검증 일시: 2026-07-22 (개발 PostgreSQL `picknext`, 읽기 전용).  
 구현 검증: 2026-07-22 — 자동 테스트 + OpenAPI + Seed Smoke Test 완료.  
-Frontend 목록 연동: 2026-07-22 — B-3a (`useCollectionsReadData`, CollectionsPage).
+Frontend 목록 연동: 2026-07-22 — B-3a.  
+Frontend 상세 연동: 2026-07-22 — B-3b (`useCollectionDetail`, `useCollectionItemsReadData`).
 
 근거: SQLAlchemy Model, Alembic `0001`/`0003`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 
 관련 문서: [02-domain-model](./02-domain-model.md), [03-recommendation-rules](./03-recommendation-rules.md), [06-frontend-integration-plan](./06-frontend-integration-plan.md), [07-read-api-contract](./07-read-api-contract.md).
 
-### Frontend 구현 현황 (B-3a)
+### Frontend 구현 현황
 
 | 항목 | 상태 |
 | --- | --- |
-| Collection 목록 `GET /collections` | **연동 완료** |
+| Collection 목록 `GET /collections` | **연동 완료 (B-3a)** |
 | 이름 검색 · Offset 페이지네이션 | **연동 완료** |
 | 다중 Category Badge · 진행률 FE 계산 | **연동 완료** |
-| `averageRating` | 항상 `null` 표시 (`—`), N+1 호출 없음 |
-| Collection 상세 · 소속 Item | **대기 (B-3b)** — 선택 시 목록 메타만 표시, Mock Item 혼합 금지 |
-| 구현 파일 | `frontend/src/api/catalog.ts` `getCollections`, `hooks/useCollectionsReadData.ts`, `mappers/collections.ts`, `App.tsx` CollectionsPage |
+| `averageRating` | 항상 `null` (`—`), N+1·첫 페이지 평균 금지 |
+| Collection 상세 `GET /collections/{id}` | **연동 완료 (B-3b)** |
+| 소속 Item `GET /items?collection_id=&sort=title&order=asc` | **연동 완료** · 기본 `page_size` · Item 영역 페이지네이션 |
+| 부분 실패 | Collection 성공+Item 실패 → 메타 유지·Item 재시도 / Collection 실패·404 → Item 미표시 |
+| Item 상세 복귀 | `origin=collections` · Collection ID·Item page 복원 · `collectionsSnapshot` 유지 |
+| Collection 쓰기 | **대기** |
+| 구현 파일 | `getCollection`, `useCollectionDetail`, `useCollectionItemsReadData`, `CollectionDetailInline` |
+
+```text
+확정 계약과 Frontend 구현 차이 없음
+```
 
 Backend 최종 계약(본 문서 §5~§12)은 변경하지 않는다.
 
@@ -709,3 +718,4 @@ ORDER BY c.sort_order, c.name
 | 2026-07-22 | 구현 전 검증 완료, 최종 계약 문서 최초 작성 |
 | 2026-07-22 | Backend 구현·테스트·Smoke 완료, 상태 → **Backend 구현 완료** |
 | 2026-07-22 | Frontend B-3a 목록 연동 완료 · 상세 연동 대기 |
+| 2026-07-22 | Frontend B-3b 인라인 상세·소속 Item 연동 완료 · 쓰기 대기 |

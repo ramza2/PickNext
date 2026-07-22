@@ -2,6 +2,7 @@ import { apiRequest } from "./client";
 import { buildQueryString } from "./query";
 import type {
   ApiCategoriesResponse,
+  ApiCollection,
   ApiCollectionListParams,
   ApiCollectionListResponse,
   ApiItemDetail,
@@ -64,4 +65,14 @@ export function getCollections(
     order: params?.order,
   });
   return apiRequest<ApiCollectionListResponse>(`/collections${qs}`, { signal });
+}
+
+export function getCollection(
+  collectionId: string,
+  signal?: AbortSignal,
+): Promise<ApiCollection> {
+  return apiRequest<ApiCollection>(
+    `/collections/${encodeURIComponent(collectionId)}`,
+    { signal },
+  );
 }

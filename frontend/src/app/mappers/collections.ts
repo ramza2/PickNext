@@ -26,6 +26,9 @@ export interface CollectionListItemViewModel {
   updatedAt: string;
 }
 
+/** Same schema as list; alias for detail screens. */
+export type CollectionDetailViewModel = CollectionListItemViewModel;
+
 export function computeCollectionProgressPercent(
   itemCount: number,
   completedCount: number,
@@ -57,5 +60,25 @@ export function mapApiCollectionToListItem(
     averageRating: null,
     createdAt: collection.created_at,
     updatedAt: collection.updated_at,
+  };
+}
+
+export const mapApiCollectionToDetail = mapApiCollectionToListItem;
+
+/** Pure helper for Collection 소속 Item 목록 호출 파라미터. page_size는 기본값 사용(미전달). */
+export function buildCollectionItemsQueryParams(
+  collectionId: string,
+  page: number,
+): {
+  collection_id: string;
+  sort: "title";
+  order: "asc";
+  page: number;
+} {
+  return {
+    collection_id: collectionId,
+    sort: "title",
+    order: "asc",
+    page,
   };
 }

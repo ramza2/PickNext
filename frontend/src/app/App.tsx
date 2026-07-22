@@ -41,6 +41,8 @@ import {
   useCollectionsReadData,
   type CollectionsQuerySnapshot,
 } from "./hooks/useCollectionsReadData";
+import { useCollectionDetail } from "./hooks/useCollectionDetail";
+import { useCollectionItemsReadData } from "./hooks/useCollectionItemsReadData";
 import { useItemDetail } from "./hooks/useItemDetail";
 import {
   mapApiCategoryToHomeCategory,
@@ -51,6 +53,7 @@ import {
   mapApiItemToItemsListViewModel,
 } from "./mappers/items";
 import {
+  mapApiCollectionToDetail,
   mapApiCollectionToListItem,
   type CollectionListItemViewModel,
 } from "./mappers/collections";
@@ -541,10 +544,11 @@ function ItemFormModal({ editItem, onClose, onSave, showToast }: {
 
 // ─── Item Detail Page ─────────────────────────────────────────────────────────
 
-function ItemDetailPage({ itemId, onBack, showToast }: {
+function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로" }: {
   itemId: string | null;
   onBack: () => void;
   showToast: (m: string) => void;
+  backLabel?: string;
 }) {
   const { item, isLoading, error, reload } = useItemDetail(itemId);
 
@@ -552,13 +556,13 @@ function ItemDetailPage({ itemId, onBack, showToast }: {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
-          <ChevronLeft size={16}/> 목록으로
+          <ChevronLeft size={16}/> {backLabel}
         </button>
         <div className="bg-card border border-border rounded-2xl p-8 text-center">
           <p className="font-medium text-foreground mb-4">선택된 항목이 없습니다.</p>
-          <button onClick={() => { /* go items via onBack if origin unknown handled in App */ onBack(); }}
+          <button onClick={onBack}
             className="inline-flex items-center gap-1.5 text-sm bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium">
-            목록으로 돌아가기
+            {backLabel} 돌아가기
           </button>
         </div>
       </div>
@@ -569,7 +573,7 @@ function ItemDetailPage({ itemId, onBack, showToast }: {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
-          <ChevronLeft size={16}/> 목록으로
+          <ChevronLeft size={16}/> {backLabel}
         </button>
         <div className="bg-card border border-border rounded-2xl p-6 mb-4">
           <div className="flex gap-5">
@@ -597,7 +601,7 @@ function ItemDetailPage({ itemId, onBack, showToast }: {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
-          <ChevronLeft size={16}/> 목록으로
+          <ChevronLeft size={16}/> {backLabel}
         </button>
         <div className="bg-card border border-border rounded-2xl p-8 text-center">
           <p className="font-medium text-foreground mb-2">
@@ -615,7 +619,7 @@ function ItemDetailPage({ itemId, onBack, showToast }: {
             )}
             <button onClick={onBack}
               className="inline-flex items-center gap-1.5 text-sm border border-border text-foreground px-4 py-2 rounded-xl hover:bg-muted transition-colors font-medium">
-              목록으로 돌아가기
+              {backLabel} 돌아가기
             </button>
           </div>
         </div>
@@ -627,13 +631,13 @@ function ItemDetailPage({ itemId, onBack, showToast }: {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
-          <ChevronLeft size={16}/> 목록으로
+          <ChevronLeft size={16}/> {backLabel}
         </button>
         <div className="bg-card border border-border rounded-2xl p-8 text-center">
           <p className="font-medium text-foreground mb-4">선택된 항목이 없습니다.</p>
           <button onClick={onBack}
             className="inline-flex items-center gap-1.5 text-sm bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium">
-            목록으로 돌아가기
+            {backLabel} 돌아가기
           </button>
         </div>
       </div>
@@ -663,7 +667,7 @@ function ItemDetailPage({ itemId, onBack, showToast }: {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
-        <ChevronLeft size={16}/> 목록으로
+        <ChevronLeft size={16}/> {backLabel}
       </button>
 
       {/* Header */}
@@ -2059,6 +2063,11 @@ function ItemsPage({
 
 // ─── Collections Page ─────────────────────────────────────────────────────────
 
+interface CollectionDetailSelection {
+  collectionId: string;
+  itemsPage: number;
+}
+
 function CollectionCategoryBadges({
   categories,
   sm,
@@ -2099,12 +2108,20 @@ function CollectionsPage({
   showToast,
   initialSnapshot,
   onSnapshotChange,
+  selection,
+  onSelectionChange,
+  openItemDetail,
 }: {
   showToast: (m: string) => void;
   initialSnapshot?: CollectionsQuerySnapshot | null;
   onSnapshotChange?: (snapshot: CollectionsQuerySnapshot) => void;
+  selection: CollectionDetailSelection | null;
+  onSelectionChange: (selection: CollectionDetailSelection | null) => void;
+  openItemDetail: (
+    itemId: string,
+    context: { collectionId: string; collectionItemsPage: number },
+  ) => void;
 }) {
-  const [selected, setSelected] = useState<CollectionListItemViewModel | null>(null);
   const onSnapshotChangeRef = useRef(onSnapshotChange);
   onSnapshotChangeRef.current = onSnapshotChange;
 
@@ -2140,77 +2157,18 @@ function CollectionsPage({
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
 
-  if (selected) {
+  if (selection) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <button
-          type="button"
-          onClick={() => setSelected(null)}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5"
-        >
-          <ChevronLeft size={16}/> Collection 목록
-        </button>
-        <div className="bg-card border border-border rounded-2xl p-6 mb-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <CollectionCategoryBadges categories={selected.categories}/>
-                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-px rounded">Collection</span>
-              </div>
-              <h1 className="text-2xl font-bold text-foreground break-words">{selected.name}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{selected.itemCount}개 항목</p>
-            </div>
-            <div className="flex gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => showToast("추천 API는 아직 연결되지 않았습니다.")}
-                className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="이 Collection에서 추천"
-              >
-                <Shuffle size={15}/>
-              </button>
-              <button
-                type="button"
-                onClick={() => showToast("Collection 수정 API는 아직 연결되지 않았습니다.")}
-                className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="수정"
-              >
-                <Edit2 size={15}/>
-              </button>
-              <button
-                type="button"
-                onClick={() => showToast("Collection 삭제 API는 아직 연결되지 않았습니다.")}
-                className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors"
-                title="삭제"
-              >
-                <Trash2 size={15}/>
-              </button>
-            </div>
-          </div>
-          <div className="mt-4">
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-muted-foreground">진행률</span>
-              <span className="font-semibold">{selected.progressPercent}%</span>
-            </div>
-            <ProgressBar value={selected.progressPercent}/>
-            <div className="flex gap-4 mt-2 text-xs">
-              <span className="text-blue-600">예정 {selected.plannedCount}</span>
-              <span className="text-emerald-600">완료 {selected.completedCount}</span>
-              <span className="flex items-center gap-0.5 text-muted-foreground">
-                <Star size={10}/>—
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-card border border-border rounded-2xl p-6 text-center">
-          <p className="text-sm font-medium text-foreground mb-1">상세 데이터 연동 준비 중</p>
-          <p className="text-xs text-muted-foreground">
-            Collection 메타데이터는 API 목록 응답입니다. 소속 Item 목록은 다음 단계에서 연동됩니다.
-          </p>
-          <p className="text-[10px] text-muted-foreground mt-3 font-mono break-all">id: {selected.id}</p>
-        </div>
-      </div>
+      <CollectionDetailInline
+        collectionId={selection.collectionId}
+        itemsPage={selection.itemsPage}
+        onItemsPageChange={(itemsPage) =>
+          onSelectionChange({ collectionId: selection.collectionId, itemsPage })
+        }
+        onBack={() => onSelectionChange(null)}
+        openItemDetail={openItemDetail}
+        showToast={showToast}
+      />
     );
   }
 
@@ -2289,7 +2247,9 @@ function CollectionsPage({
               <button
                 key={col.id}
                 type="button"
-                onClick={() => setSelected(col)}
+                onClick={() =>
+                  onSelectionChange({ collectionId: col.id, itemsPage: 1 })
+                }
                 className="bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 hover:shadow-sm transition-all"
               >
                 <div className="flex items-start justify-between mb-2 gap-2">
@@ -2317,6 +2277,380 @@ function CollectionsPage({
             <div className="flex items-center justify-between mt-5">
               <p className="text-xs text-muted-foreground">
                 {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}개
+                {totalPages > 0 ? ` · ${page}/${totalPages}페이지` : ""}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  disabled={!hasPrevious}
+                  aria-label="첫 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronsLeft size={14}/>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(page - 1)}
+                  disabled={!hasPrevious}
+                  aria-label="이전 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronLeft size={14}/>
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const p = Math.min(Math.max(page - 2, 1) + i, totalPages);
+                  return (
+                    <button
+                      key={`${p}-${i}`}
+                      type="button"
+                      onClick={() => setPage(p)}
+                      aria-label={`${p}페이지`}
+                      aria-current={page === p ? "page" : undefined}
+                      className={`w-7 h-7 rounded-lg text-xs font-medium border transition-colors ${page === p ? "border-primary bg-primary text-white" : "border-border text-foreground hover:bg-muted"}`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setPage(page + 1)}
+                  disabled={!hasNext}
+                  aria-label="다음 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronRight size={14}/>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  disabled={!hasNext}
+                  aria-label="마지막 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronsRight size={14}/>
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CollectionDetailInline({
+  collectionId,
+  itemsPage,
+  onItemsPageChange,
+  onBack,
+  openItemDetail,
+  showToast,
+}: {
+  collectionId: string;
+  itemsPage: number;
+  onItemsPageChange: (page: number) => void;
+  onBack: () => void;
+  openItemDetail: (
+    itemId: string,
+    context: { collectionId: string; collectionItemsPage: number },
+  ) => void;
+  showToast: (m: string) => void;
+}) {
+  const {
+    collection,
+    isLoading: isDetailLoading,
+    error: detailError,
+    isNotFound,
+    reload: reloadDetail,
+  } = useCollectionDetail(collectionId);
+
+  const detailReady = Boolean(collection) && !detailError;
+  const {
+    items,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasNext,
+    hasPrevious,
+    isLoading: isItemsLoading,
+    error: itemsError,
+    setPage,
+    reload: reloadItems,
+  } = useCollectionItemsReadData(collectionId, {
+    enabled: detailReady,
+    page: itemsPage,
+    onPageChange: onItemsPageChange,
+  });
+
+  const detailVm = useMemo(
+    () => (collection ? mapApiCollectionToDetail(collection) : null),
+    [collection],
+  );
+  const listItems = useMemo(
+    () => items.map(mapApiItemToItemsListViewModel),
+    [items],
+  );
+
+  const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, total);
+
+  if (isDetailLoading && !detailVm) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Collection 목록으로"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ChevronLeft size={16}/> Collection 목록
+        </button>
+        <div className="bg-card border border-border rounded-2xl p-6 mb-5 space-y-3">
+          <div className="h-4 w-32 animate-pulse rounded bg-muted"/>
+          <div className="h-8 w-2/3 animate-pulse rounded bg-muted"/>
+          <div className="h-3 w-full animate-pulse rounded bg-muted"/>
+        </div>
+        <div className="bg-card border border-border rounded-2xl py-12 text-center text-sm text-muted-foreground">
+          Collection을 불러오는 중…
+        </div>
+      </div>
+    );
+  }
+
+  if (detailError || !detailVm) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Collection 목록으로"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
+          <ChevronLeft size={16}/> Collection 목록
+        </button>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <p className="font-medium text-foreground mb-2">
+            {isNotFound
+              ? "Collection을 찾을 수 없습니다."
+              : "Collection 정보를 불러오지 못했습니다."}
+          </p>
+          {isNotFound && (
+            <p className="text-sm text-muted-foreground mb-5">
+              삭제되었거나 접근할 수 없는 Collection입니다.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2 justify-center">
+            {!isNotFound && (
+              <button
+                type="button"
+                onClick={() => void reloadDetail()}
+                className="inline-flex items-center gap-1.5 text-sm bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                <RefreshCw size={14}/> 다시 시도
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-sm border border-border text-foreground px-4 py-2 rounded-xl hover:bg-muted transition-colors font-medium"
+            >
+              목록으로 돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label="Collection 목록으로"
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5"
+      >
+        <ChevronLeft size={16}/> Collection 목록
+      </button>
+
+      <div className="bg-card border border-border rounded-2xl p-6 mb-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <CollectionCategoryBadges categories={detailVm.categories}/>
+              <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-px rounded">Collection</span>
+            </div>
+            <h1 className="text-2xl font-bold text-foreground break-words">{detailVm.name}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{detailVm.itemCount}개 항목</p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => showToast("추천 API는 아직 연결되지 않았습니다.")}
+              className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="이 Collection에서 추천"
+            >
+              <Shuffle size={15}/>
+            </button>
+            <button
+              type="button"
+              onClick={() => showToast("Collection 수정 API는 아직 연결되지 않았습니다.")}
+              className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="수정"
+            >
+              <Edit2 size={15}/>
+            </button>
+            <button
+              type="button"
+              onClick={() => showToast("Collection 삭제 API는 아직 연결되지 않았습니다.")}
+              className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors"
+              title="삭제"
+            >
+              <Trash2 size={15}/>
+            </button>
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-muted-foreground">진행률</span>
+            <span className="font-semibold">{detailVm.progressPercent}%</span>
+          </div>
+          <ProgressBar value={detailVm.progressPercent}/>
+          <div className="flex gap-4 mt-2 text-xs">
+            <span className="text-blue-600">예정 {detailVm.plannedCount}</span>
+            <span className="text-emerald-600">완료 {detailVm.completedCount}</span>
+            <span className="flex items-center gap-0.5 text-muted-foreground">
+              <Star size={10}/>—
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-foreground">항목 목록</h2>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => showToast("TMDB 연동은 아직 연결되지 않았습니다.")}
+            className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1"
+          >
+            <Search size={12}/> TMDB 검색 후 추가
+          </button>
+          <button
+            type="button"
+            onClick={() => showToast("Item 추가 API는 아직 연결되지 않았습니다.")}
+            className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1"
+          >
+            <Plus size={12}/> 직접 추가
+          </button>
+        </div>
+      </div>
+
+      {itemsError ? (
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <p className="text-sm text-foreground mb-1">소속 Item을 불러오지 못했습니다.</p>
+          <p className="text-xs text-muted-foreground mb-4">Collection 정보는 유지됩니다.</p>
+          <button
+            type="button"
+            onClick={() => void reloadItems()}
+            className="inline-flex items-center gap-1.5 text-sm text-primary border border-primary/25 px-4 py-2 rounded-xl hover:bg-blue-50 transition-colors"
+          >
+            <RefreshCw size={14}/> 다시 시도
+          </button>
+        </div>
+      ) : isItemsLoading && listItems.length === 0 ? (
+        <div className="bg-card border border-border rounded-2xl py-10 text-center text-sm text-muted-foreground">
+          항목을 불러오는 중…
+        </div>
+      ) : total === 0 ? (
+        <div className="bg-card border border-border rounded-2xl py-10 text-center text-sm text-muted-foreground">
+          이 Collection에 등록된 항목이 없습니다.
+        </div>
+      ) : (
+        <>
+          <div className={`space-y-2 ${isItemsLoading ? "opacity-70" : ""}`}>
+            {listItems.map((item) => {
+              const Icon = item.presentation.icon;
+              return (
+                <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${item.title} 상세 보기`}
+                  onClick={() =>
+                    openItemDetail(item.id, {
+                      collectionId,
+                      collectionItemsPage: page,
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openItemDetail(item.id, {
+                        collectionId,
+                        collectionItemsPage: page,
+                      });
+                    }
+                  }}
+                  className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer"
+                >
+                  <div
+                    className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
+                    style={{ backgroundColor: item.presentation.color }}
+                  >
+                    {item.title.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground text-sm truncate">{item.title}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span
+                        className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
+                        style={{
+                          backgroundColor: item.presentation.bgColor,
+                          color: item.presentation.color,
+                        }}
+                      >
+                        <Icon size={10}/>{item.categoryName}
+                      </span>
+                      <StatusBadge status={item.status} sm/>
+                      {item.progressNote && (
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">
+                          {item.progressNote}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5">
+                      <StarRating rating={displayItemRating(item.rating)} sm/>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => showToast("상태 변경 기능은 다음 단계에서 제공됩니다.")}
+                      className="text-[10px] border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors"
+                    >
+                      완료
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => showToast("Collection에서 제거는 다음 단계에서 제공됩니다.")}
+                      className="text-[10px] border border-border text-muted-foreground px-2 py-1 rounded-lg hover:bg-muted transition-colors"
+                    >
+                      제거
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-5">
+              <p className="text-xs text-muted-foreground">
+                {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}건
                 {totalPages > 0 ? ` · ${page}/${totalPages}페이지` : ""}
               </p>
               <div className="flex items-center gap-1">
@@ -2682,11 +3016,13 @@ function SettingsPage({ setPage }: { setPage: (p: Page) => void }) {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
-type ItemDetailOrigin = "items" | "home";
+type ItemDetailOrigin = "items" | "home" | "collections";
 
 interface ItemDetailSelection {
   itemId: string;
   origin: ItemDetailOrigin;
+  collectionId?: string;
+  collectionItemsPage?: number;
 }
 
 export default function App() {
@@ -2697,6 +3033,8 @@ export default function App() {
     useState<ItemsPageStateSnapshot | null>(null);
   const [collectionsSnapshot, setCollectionsSnapshot] =
     useState<CollectionsQuerySnapshot | null>(null);
+  const [collectionDetailSelection, setCollectionDetailSelection] =
+    useState<CollectionDetailSelection | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<HistoryEntry | null>(null);
   const [recommendCats, setRecommendCats]     = useState<string[]>([]);
   const [toast, setToast]                     = useState<string | null>(null);
@@ -2708,20 +3046,42 @@ export default function App() {
     setTimeout(() => setToast(null), 2800);
   }, []);
 
-  const openItemDetail = useCallback((itemId: string, origin: ItemDetailOrigin) => {
-    setItemDetailSelection({ itemId, origin });
+  const openItemDetail = useCallback((
+    itemId: string,
+    origin: ItemDetailOrigin,
+    extras?: { collectionId?: string; collectionItemsPage?: number },
+  ) => {
+    setItemDetailSelection({
+      itemId,
+      origin,
+      collectionId: extras?.collectionId,
+      collectionItemsPage: extras?.collectionItemsPage,
+    });
     setPage("item-detail");
   }, []);
 
   const closeItemDetail = useCallback(() => {
-    const destination = itemDetailSelection?.origin ?? "items";
-    setPage(destination);
+    const selection = itemDetailSelection;
+    if (selection?.origin === "collections" && selection.collectionId) {
+      setCollectionDetailSelection({
+        collectionId: selection.collectionId,
+        itemsPage: selection.collectionItemsPage ?? 1,
+      });
+      setPage("collections");
+      setItemDetailSelection(null);
+      return;
+    }
+    const destination = selection?.origin ?? "items";
+    setPage(destination === "collections" ? "collections" : destination);
     setItemDetailSelection(null);
   }, [itemDetailSelection]);
 
   const navigateFromLayout = useCallback((next: Page) => {
     if (next !== "item-detail") {
       setItemDetailSelection(null);
+    }
+    if (next !== "collections") {
+      setCollectionDetailSelection(null);
     }
     setPage(next);
   }, []);
@@ -2759,6 +3119,11 @@ export default function App() {
             showToast={showToast}
             initialSnapshot={collectionsSnapshot}
             onSnapshotChange={setCollectionsSnapshot}
+            selection={collectionDetailSelection}
+            onSelectionChange={setCollectionDetailSelection}
+            openItemDetail={(itemId, context) =>
+              openItemDetail(itemId, "collections", context)
+            }
           />
         );
       case "history":        return <HistoryPage navigateToHistory={navigateToHistory}/>;
@@ -2770,6 +3135,11 @@ export default function App() {
             itemId={itemDetailSelection?.itemId ?? null}
             onBack={closeItemDetail}
             showToast={showToast}
+            backLabel={
+              itemDetailSelection?.origin === "collections"
+                ? "Collection으로"
+                : "목록으로"
+            }
           />
         );
       case "history-detail": return selectedHistory ? <HistoryDetailPage entry={selectedHistory} onBack={() => setPage("history")} showToast={showToast}/> : null;
