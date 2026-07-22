@@ -1,0 +1,57 @@
+---
+description: PickNext 사용자 데이터, Legacy Import, Migration, Secret 및 Docker Volume 보호
+alwaysApply: true
+---
+
+# PickNext 데이터 안전
+
+## 사용자 데이터 보호
+
+- 기존 사용자 데이터, UUID, 관계, Import 이력을 보존한다.
+- 명시적 요청 없이 데이터 전체 삭제, 초기화, 재생성, 재Import를 하지 않는다.
+- 실데이터 분석은 기본적으로 읽기 전용으로 수행한다.
+- 데이터 보정은 전체 재생성보다 제한적·멱등적 방식을 우선한다.
+- 정확한 건수는 이 Rule에 고정하지 않는다. 최신 계약 문서 또는 실제 DB를 확인한다.
+
+## Docker 안전
+
+다음을 실행하지 않는다.
+
+```bash
+docker compose down -v
+```
+
+사용자가 데이터 삭제 목적을 명시적으로 승인하지 않는 한 Docker Volume을 삭제하지 않는다.
+
+다음도 임의로 수행하지 않는다.
+
+- PostgreSQL Volume 삭제
+- 테이블 전체 `TRUNCATE`
+- DB Drop
+- Import 데이터 Reset
+- Seed 사용자 재생성
+- Legacy Import 전체 재실행
+
+## Migration
+
+- Migration은 기존 데이터를 보존해야 한다.
+- 신규 컬럼은 기존 행과의 호환성을 검토한다.
+- Backfill은 작업 범위에 명시된 경우에만 수행한다.
+- Upgrade와 Downgrade 순서를 검토한다.
+- Soft Delete와 Partial Unique Index 조건을 확인한다.
+- 모델만 수정하고 Migration을 빠뜨리거나, Migration만 수정하고 모델을 빠뜨리지 않는다.
+
+## Legacy 데이터
+
+- Legacy Import Run과 매핑 테이블은 감사·검증 이력으로 취급한다.
+- 운영 `items`와 `collections`에 Legacy 내부 식별자를 새로 노출하지 않는다.
+- Legacy Import 내부 메타데이터를 공개 API 응답에 포함하지 않는다.
+- 자동 TMDB 매칭을 수행하지 않는다.
+- 기존 Legacy 항목의 외부 메타데이터는 관련 Migration과 작업 범위가 있기 전까지 임의로 채우지 않는다.
+- Legacy 세부 절차는 `docs/04-legacy-migration.md`를 확인한다.
+
+## Secret
+
+- `.env` 실제 값, API Token, DB Password를 코드·문서·로그에 기록하지 않는다.
+- Frontend에 Backend Secret이나 TMDB Token을 넣지 않는다.
+- `.env.example`에는 예시와 설명만 기록한다.

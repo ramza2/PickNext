@@ -30,6 +30,11 @@ import {
   MOCK_FILE,
 } from "../mocks/data";
 import AppLayout from "./layout/AppLayout";
+import { useHomeReadData } from "./hooks/useHomeReadData";
+import {
+  mapApiCategoryToHomeCategory,
+  mapApiItemToHomeRecentItem,
+} from "./mappers/home";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -878,22 +883,57 @@ function CategoryManagePage({ onBack, showToast }: { onBack: () => void; showToa
 
 // ─── Home Page ────────────────────────────────────────────────────────────────
 
+function HomeSectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <button onClick={onRetry}
+        className="inline-flex items-center justify-center gap-1.5 text-xs bg-primary text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition-colors font-medium self-start sm:self-auto">
+        <RefreshCw size={12}/> 다시 시도
+      </button>
+    </div>
+  );
+}
+
 function HomePage({ setPage, navigateToRecommend, openAddItem }: {
   setPage: (p: Page) => void;
   navigateToRecommend: (cats: string[]) => void;
   openAddItem: () => void;
 }) {
-  const totalItems = CATEGORIES.reduce((s,c) => s+c.total,0);
-  const totalPlan  = CATEGORIES.reduce((s,c) => s+c.planned,0);
-  const totalDone  = CATEGORIES.reduce((s,c) => s+c.completed,0);
-  const recent     = [...ITEMS].sort((a,b) => b.registeredAt.localeCompare(a.registeredAt)).slice(0,5);
+  // Hook lives in HomePage: App uses conditional page render, so data loads on Home entry
+  // and refetches when returning to Home (no cache library in B-2a).
+  const {
+    summary,
+    categories,
+    recentItems,
+    isSummaryLoading,
+    isCategoriesLoading,
+    isRecentItemsLoading,
+    summaryError,
+    categoriesError,
+    recentItemsError,
+    reloadSummary,
+    reloadCategories,
+    reloadRecentItems,
+  } = useHomeReadData();
 
+  const homeCategories = categories.map(mapApiCategoryToHomeCategory);
+  const recent = recentItems.map(mapApiItemToHomeRecentItem);
+
+  // Keep Mock slug IDs for RecommendPage compatibility (not API UUIDs).
   const quickRec = [
     { label:"영화 추천",  cats:["movie"] },
     { label:"드라마 추천", cats:["kdrama","jdrama","usdrama","cndrama"] },
     { label:"애니 추천",  cats:["anime","animemov"] },
     { label:"예능 추천",  cats:["variety"] },
     { label:"음식 추천",  cats:["food"] },
+  ];
+
+  const statDefs = [
+    { label:"전체 항목",    key:"item_count" as const },
+    { label:"앞으로 볼",    key:"planned_count" as const },
+    { label:"완료 항목",    key:"completed_count" as const },
+    { label:"Collection",  key:"collection_count" as const },
   ];
 
   return (
@@ -918,25 +958,30 @@ function HomePage({ setPage, navigateToRecommend, openAddItem }: {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — Backend Summary (no Mock fallback) */}
       <div>
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">요약 통계</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label:"전체 항목",    value:totalItems.toLocaleString() },
-            { label:"앞으로 볼",    value:totalPlan.toLocaleString()  },
-            { label:"완료 항목",    value:totalDone.toLocaleString()  },
-            { label:"Collection",  value:COLLECTIONS.length.toString() },
-          ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-2xl p-4">
-              <div className="text-2xl font-bold text-foreground">{s.value}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
-            </div>
-          ))}
-        </div>
+        {summaryError && !isSummaryLoading ? (
+          <HomeSectionError message="통계를 불러오지 못했습니다." onRetry={reloadSummary}/>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {statDefs.map(s => (
+              <div key={s.label} className="bg-card border border-border rounded-2xl p-4">
+                {isSummaryLoading || !summary ? (
+                  <div className="h-8 w-20 animate-pulse rounded bg-muted"/>
+                ) : (
+                  <div className="text-2xl font-bold text-foreground">
+                    {summary[s.key].toLocaleString("ko-KR")}
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Quick Recommend */}
+      {/* Quick Recommend — Mock recommend flow unchanged */}
       <div>
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">빠른 추천</h2>
         <div className="flex flex-wrap gap-2">
@@ -959,18 +1004,51 @@ function HomePage({ setPage, navigateToRecommend, openAddItem }: {
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">최근 등록</h2>
             <button onClick={() => setPage("items")} className="text-xs text-primary hover:underline">전체 보기</button>
           </div>
-          <div className="space-y-2">
-            {recent.map(item => (
-              <div key={item.id} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
-                <Poster title={item.title} categoryId={item.categoryId} size="sm"/>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground truncate">{item.title}</div>
-                  <div className="mt-0.5"><CategoryBadge categoryId={item.categoryId} sm/></div>
+          {recentItemsError && !isRecentItemsLoading ? (
+            <HomeSectionError message="최근 등록 항목을 불러오지 못했습니다." onRetry={reloadRecentItems}/>
+          ) : isRecentItemsLoading ? (
+            <div className="space-y-2">
+              {[0,1,2,3,4].map(i => (
+                <div key={i} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-10 h-14 rounded-lg animate-pulse bg-muted flex-shrink-0"/>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-muted"/>
+                    <div className="h-3 w-1/3 animate-pulse rounded bg-muted"/>
+                  </div>
+                  <div className="h-4 w-10 animate-pulse rounded bg-muted flex-shrink-0"/>
                 </div>
-                <StatusBadge status={item.status} sm/>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-sm text-muted-foreground">최근 등록된 항목이 없습니다.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recent.map(item => {
+                const Icon = item.presentation.icon;
+                return (
+                  <div key={item.id} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
+                    {/* Placeholder poster — Legacy items have no poster_path */}
+                    <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
+                      style={{ backgroundColor: item.presentation.color }}>
+                      {item.title.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate">{item.title}</div>
+                      <div className="mt-0.5">
+                        <span className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
+                          style={{ backgroundColor: item.presentation.bgColor, color: item.presentation.color }}>
+                          <Icon size={10}/>{item.categoryName}
+                        </span>
+                      </div>
+                    </div>
+                    <StatusBadge status={item.status} sm/>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -996,24 +1074,48 @@ function HomePage({ setPage, navigateToRecommend, openAddItem }: {
 
       <div>
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">카테고리별 현황</h2>
-        <div className="grid sm:grid-cols-2 gap-2">
-          {CATEGORIES.map(cat => (
-            <div key={cat.id} className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span style={{ color: cat.color }}>{cat.icon}</span>
-                  <span className="text-sm font-medium text-foreground">{cat.name}</span>
+        {categoriesError && !isCategoriesLoading ? (
+          <HomeSectionError message="카테고리를 불러오지 못했습니다." onRetry={reloadCategories}/>
+        ) : isCategoriesLoading ? (
+          <div className="grid sm:grid-cols-2 gap-2">
+            {[0,1,2,3,4,5].map(i => (
+              <div key={i} className="bg-card border border-border rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-24 animate-pulse rounded bg-muted"/>
+                  <div className="h-3 w-12 animate-pulse rounded bg-muted"/>
                 </div>
-                <span className="text-xs text-muted-foreground">{cat.total.toLocaleString()}개</span>
+                <div className="h-1.5 w-full animate-pulse rounded-full bg-muted"/>
+                <div className="flex justify-between">
+                  <div className="h-3 w-16 animate-pulse rounded bg-muted"/>
+                  <div className="h-3 w-16 animate-pulse rounded bg-muted"/>
+                </div>
               </div>
-              <ProgressBar value={(cat.completed/cat.total)*100}/>
-              <div className="flex justify-between mt-1.5 text-xs">
-                <span className="text-blue-600">예정 {cat.planned.toLocaleString()}</span>
-                <span className="text-emerald-600">완료 {cat.completed.toLocaleString()}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-2">
+            {homeCategories.map(cat => {
+              const Icon = cat.presentation.icon;
+              const total = cat.itemCount;
+              return (
+                <div key={cat.id} className="bg-card border border-border rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span style={{ color: cat.presentation.color }}><Icon size={14}/></span>
+                      <span className="text-sm font-medium text-foreground">{cat.name}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{total.toLocaleString("ko-KR")}개</span>
+                  </div>
+                  <ProgressBar value={total > 0 ? (cat.completedCount / total) * 100 : 0}/>
+                  <div className="flex justify-between mt-1.5 text-xs">
+                    <span className="text-blue-600">예정 {cat.plannedCount.toLocaleString("ko-KR")}</span>
+                    <span className="text-emerald-600">완료 {cat.completedCount.toLocaleString("ko-KR")}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

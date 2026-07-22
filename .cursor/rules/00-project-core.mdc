@@ -1,0 +1,60 @@
+---
+description: PickNext 프로젝트 공통 개발 원칙, 근거 우선순위 및 작업 범위 통제
+alwaysApply: true
+---
+
+# PickNext 공통 원칙
+
+## 프로젝트 성격
+
+- PickNext는 영화에 한정되지 않는 범용 관심 항목 관리·랜덤 추천 서비스다.
+- 핵심 도메인은 Category, Collection, Item, Recommendation History다.
+- 다중 사용자를 고려해 주요 데이터는 사용자 범위를 가진다.
+- 현재 구현 여부는 코드와 관련 설계 문서를 확인한다. Phase 번호나 운영 수치를 이 Rule에 고정하지 않는다.
+
+## 근거 우선순위
+
+판단할 때 다음 순서를 따른다.
+
+1. 현재 사용자의 명시적인 작업 요청
+2. 현재 코드, SQLAlchemy 모델, Alembic Migration, 테스트
+3. 상태가 구현 완료 또는 확정 계약으로 표시된 문서
+4. 향후 계획 또는 구현 전 문서
+5. Figma Mock 및 Prototype 동작
+
+- Figma Mock·계획 문서가 Backend 모델과 다르면 실제 코드와 확정 계약을 우선한다.
+- 사용자가 디자인 기준선 보존을 명시한 경우 Frontend 시각 구조는 Figma 기준선을 따른다 (`30-frontend-figma`).
+
+## 관련 문서 선택
+
+작업에 필요한 문서만 선택해 읽는다. 매번 전체 `docs/`를 강제하지 않는다.
+
+- 제품·도메인: `docs/01-product-scope.md`, `docs/02-domain-model.md`
+- 추천: `docs/03-recommendation-rules.md`
+- Legacy: `docs/04-legacy-migration.md`
+- TMDB: `docs/05-tmdb-integration-plan.md`
+- Frontend: `docs/06-frontend-integration-plan.md`
+- 읽기 API 계약: `docs/07-read-api-contract.md`
+- 실행·명령: `README.md`, `frontend/README.md`
+
+정확한 수치·현재 구현 상태는 위 문서와 실제 DB·코드를 확인한다.
+
+## 작업 범위
+
+- 작업 전에 관련 코드와 설계 문서를 확인한다.
+- 사용자가 요청한 단계만 수행한다.
+- 범위를 넘는 후속 단계를 자동으로 시작하지 않는다.
+- 요청되지 않은 전면 리팩터링을 하지 않는다.
+- 요청되지 않은 Framework·Library·상태관리 도구를 도입하지 않는다.
+- 기존 구조와 패턴을 우선한다.
+- 큰 변경은 작은 단계로 나누고 단계별로 검증한다.
+- 코드와 문서 충돌을 발견하면 숨기지 말고 보고한다.
+- 추측으로 존재하지 않는 기능이나 데이터를 생성하지 않는다.
+
+## 완료 원칙
+
+- 수행한 범위와 미수행 범위를 구분한다.
+- 검증하지 않은 항목을 완료했다고 표현하지 않는다.
+- 작업이 완료되면 결과를 보고하고 중단한다.
+- 검증·완료 보고 세부 형식은 `50-verification`을 따른다.
+- 사용자 데이터·Docker·Secret 안전은 `10-data-safety`를 따른다.

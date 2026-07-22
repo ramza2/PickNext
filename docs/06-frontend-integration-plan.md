@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend Phase B-1 구조 준비 완료  
+> **상태:** Frontend Phase B-2a 홈 읽기 API 연동 완료  
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (이번 단계):** 실제 API 화면 연동, Loading·Error UI, React Router, App.tsx Page 분리
+> **비범위 (이번 단계):** 전체 Item 목록·상세 API, Collection/History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -51,10 +51,14 @@ frontend/
    ├─ mocks/
    │  └─ data.tsx
    ├─ app/
-   │  ├─ App.tsx               # 화면·모달·Mock 기반 상태
+   │  ├─ App.tsx               # 화면·모달 (Home만 읽기 API)
    │  ├─ pageTypes.ts
+   │  ├─ hooks/useHomeReadData.ts
+   │  ├─ mappers/home.ts
+   │  ├─ presentation/categoryPresentation.ts
    │  ├─ layout/AppLayout.tsx
    │  └─ components/
+   ├─ utils/date.ts
    └─ styles/
 ```
 
@@ -62,7 +66,7 @@ frontend/
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
 
-**화면은 여전히 Mock 데이터로 동작한다.** API 함수는 준비만 되어 있으며 Page에서 호출하지 않는다.
+**Home**은 Summary·Categories·최근 등록을 Backend API로 표시한다. 그 외 화면은 Mock 유지. API 오류 시 Mock으로 Fallback하지 않는다.
 
 ## 3. 화면 목록
 
@@ -175,8 +179,8 @@ frontend/
 | 평점 0.5 단위 | StarPicker **정수만** | 0.5 UI로 보정 (시각 동일 계열) |
 | 미평가 표시 | Mock은 `!rating`으로 평가 없음 | **현재 API는 `rating=0.0`을 숫자로 반환** → FE가 `0.0`을 「평가 없음」으로 표시. `null` 미사용. 진짜 0점과의 구분은 **후속**에서 `rating` nullable Migration을 별도 검토 |
 | 이력 Snapshot | Mock title 문자열 | Backend history + snapshot |
-| 통계 Backend 집계 | Mock 합산 | `GET /summary` + `GET /categories` |
-| Legacy 7202건, poster NULL | Mock 40건, Placeholder는 Poster 컴포넌트 있음 | 목록 API + Placeholder 유지 |
+| 통계 Backend 집계 | **Home: API Summary/Categories 연동 완료** | Items 등 나머지 화면은 후속 |
+| Legacy 7202건, poster NULL | Home 최근 등록은 API + Placeholder | 목록 API + Placeholder 유지 |
 | Category UUID | Mock string id | API UUID 그대로 사용 (이름 slug 금지) |
 | react-router 미사용 | state 전환 | 점진적 Route 도입 |
 
@@ -192,16 +196,26 @@ frontend/
 4. `AppLayout` 추출 (Sidebar/Top/Bottom JSX·className 그대로)
 5. Catalog 읽기 함수 준비 (화면 미호출)
 
-### Phase B-2 — 읽기 API 점진 연결 (다음)
+### Phase B-2a — 홈 읽기 API ✅ 완료
 
-> Backend 읽기 API 구현 완료:  
-> `GET /api/v1/summary`, `/categories`, `/items`, `/items/{item_id}`
+- Summary / Categories / 최근 등록(`items?page=1&page_size=5&sort=created_at&order=desc`)
+- Category Presentation Map (이름 → 아이콘·색상)
+- 섹션별 Loading·Error·Empty, 부분 실패, Abort
+- 빠른 추천·History·기타 화면은 Mock 유지
+- 최근 등록 카드는 **클릭 없음**(원본과 동일). 상세 API 미연결
 
-5. Category + Summary + Item 목록/상세를 화면 단위로 Mock 교체  
-   (Home·Items·ItemDetail 우선)
-6. Collections 목록/상세 (Backend Collection 읽기 API 선행 필요 시 대기)
-7. History 목록/상세
-8. Loading·Error UI (최소)
+### Phase B-2b — 전체 항목 목록 (다음)
+
+```text
+Frontend Phase B-2b
+전체 항목 목록을 Backend GET /items에 연결
+```
+
+### Phase B-2c 이후
+
+- Item 상세 `GET /items/{id}`
+- Collections / History 읽기
+- Loading·Error UI 확장
 
 ### Phase C — 쓰기·추천·TMDB
 
@@ -227,15 +241,16 @@ GET /api/v1/items
 GET /api/v1/items/{item_id}
 ```
 
-### 아직 Frontend 미완료
+### Frontend 연동 현황
 
-- 실제 API 화면 연동
-- Loading·Error UI
-- Home / Items / Item Detail API 연동
-- Collection API 연동
-- React Router
-- App.tsx Page 분리
-- 쓰기 API / TMDB / 추천·이력
+| 영역 | 상태 |
+| --- | --- |
+| Home Summary / Categories / 최근 등록 | ✅ API |
+| Home 빠른 추천 / 최근 선택 | Mock |
+| Items 목록·상세 | Mock |
+| Collections / History / TMDB / Recommend | Mock |
+| React Router / Page 분리 | 미완료 |
+| 쓰기·추천·TMDB API | 미완료 |
 
 ## 9. 위험 요소
 
@@ -254,9 +269,8 @@ GET /api/v1/items/{item_id}
 ## 10. 다음 작업 순서
 
 ```text
-Frontend Phase B-2
-Category + Summary + Item 목록 + Item 상세를
-화면 단위로 Backend 읽기 API에 점진 연결
+Frontend Phase B-2b
+전체 항목 목록을 Backend GET /items에 연결
 ```
 
 **금지 유지:** 새 React 프로젝트, App 전면 재작성, Tailwind/색상 체계 교체, Mock 일괄 삭제.

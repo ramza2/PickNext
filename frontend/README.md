@@ -42,20 +42,34 @@ VITE_API_PROXY_TARGET=http://127.0.0.1:8002
 
 Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 
+## 화면별 데이터 출처
+
+| 화면 | 출처 |
+| --- | --- |
+| Home — Summary / Categories / 최근 등록 | **API** |
+| Home — 빠른 추천 / 최근 선택 이력 | Mock |
+| Items / Item Detail / Collections / History / Recommend / TMDB / Data / Settings | Mock |
+
+API 오류 시 Mock 숫자로 조용히 Fallback하지 않습니다. 해당 섹션에 오류·재시도를 표시합니다.
+
 ## 현재 구조
 
 ```text
 src/
-├─ api/           # fetch client + catalog 읽기 함수 (화면 미연결)
+├─ api/           # fetch client + catalog 읽기 함수
 ├─ types/         # Api* DTO / Mock 전용 타입
-├─ mocks/         # Figma Mock 데이터 (화면 기준)
+├─ mocks/         # Figma Mock 데이터
+├─ utils/date.ts
 └─ app/
-   ├─ App.tsx     # 화면·상태·모달 (Mock 기반)
+   ├─ App.tsx
+   ├─ hooks/useHomeReadData.ts
+   ├─ mappers/home.ts
+   ├─ presentation/categoryPresentation.ts
    ├─ pageTypes.ts
    └─ layout/AppLayout.tsx
 ```
 
-**화면은 아직 Mock 데이터로 동작합니다.** `src/api/catalog.ts`는 준비만 되어 있으며, 다음 Phase(B-2)에서 읽기 API에 점진 연결합니다.
+다음: Phase B-2b — 전체 항목 목록 API 연동.
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 

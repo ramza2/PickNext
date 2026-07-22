@@ -1,0 +1,85 @@
+---
+description: PickNext Figma Make 디자인 보존 및 Frontend API 연동 규칙
+globs: frontend/**/*.{ts,tsx,css}
+alwaysApply: false
+---
+
+# PickNext Frontend (Figma 기준선)
+
+## 디자인 기준선
+
+- `frontend/`의 Figma Make 결과를 PickNext UI 디자인 기준선으로 유지한다.
+- 기존 JSX, DOM 계층, `className`, Tailwind Theme Token을 최대한 보존한다.
+- 기능 구현을 이유로 색상, Typography, 여백, 카드, Sidebar, Top Bar, Mobile Bottom Navigation을 재설계하지 않는다.
+- raw Tailwind UI를 shadcn 등으로 전면 교체하지 않는다.
+- Desktop과 Mobile을 모두 검증한다.
+- Frontend 연동 계획은 `docs/06-frontend-integration-plan.md`를 확인한다.
+
+## 점진적 구조 변경
+
+- `App.tsx`를 한 번에 전면 재작성하지 않는다.
+- Mock, Type, Layout, Page, Router, API 연동을 작은 단계로 분리한다.
+- Component 추출 시 기존 JSX와 `className`을 그대로 이동하는 것을 우선한다.
+- 구조 분리와 기능 구현과 디자인 변경을 한 작업에서 동시에 수행하지 않는다.
+- React Router는 명시된 작업에서만 도입한다.
+
+## Mock과 API
+
+- Mock 타입과 Backend API DTO를 분리한다.
+- Mock Slug와 Backend UUID를 같은 식별자로 사용하지 않는다.
+- 관계와 API 요청에는 Runtime UUID를 사용한다.
+- Category 이름은 표현용 Map 또는 Preset Resolve에만 제한적으로 사용한다.
+- API 오류를 Mock 데이터로 조용히 대체하지 않는다.
+- Loading, Error, Empty, Success 상태를 구분한다.
+- 일부 API만 실패하면 성공한 섹션까지 숨기지 않는다.
+- 요청 취소와 오래된 응답 처리를 고려한다.
+
+## Backend에 없는 필드
+
+다음 데이터를 임의로 생성하지 않는다.
+
+- Poster URL
+- TMDB Metadata
+- Overview
+- Release Date
+- Original Title
+- Memo
+- 외부 평점
+
+Backend 응답에 없는 값은 기존 Placeholder 또는 명시적인 미표시 정책을 사용한다.
+
+## Presentation Metadata
+
+- Category 색상과 아이콘은 Frontend 표현 정보다.
+- API DTO에 `color`, `icon`을 억지로 추가하지 않는다.
+- Presentation Map에 없는 Category를 위한 Fallback을 제공한다.
+- View Model을 만들더라도 API DTO를 mutate하지 않는다.
+
+## API 사용
+
+- 기존 `src/api/client.ts`와 API 함수 구조를 우선한다.
+- 운영에서는 상대 경로 `/api/v1` 사용을 기본으로 한다.
+- Backend 주소와 Secret을 Browser 코드에 하드코딩하지 않는다.
+- 요청되지 않은 Axios, React Query, SWR, Redux, Zustand를 도입하지 않는다.
+- 새로운 Library 도입 전 기존 코드로 해결 가능한지 확인한다.
+
+## 평점과 날짜
+
+- 평점 표시 의미는 최신 Backend 계약을 따른다.
+- nullable 여부를 Frontend에서 임의로 바꾸지 않는다.
+- 날짜 파싱 실패가 전체 화면 Crash로 이어지지 않도록 한다.
+
+## 회귀
+
+Frontend 변경 후 최소한 다음을 확인한다.
+
+- Desktop Layout
+- Mobile Layout
+- Navigation
+- Modal과 Sheet
+- Loading·Error 상태
+- Console Runtime Error
+- Layout Shift
+- Figma 디자인 기준선과의 차이
+
+빌드·검증 명령은 `50-verification`을 따른다. Secret은 `10-data-safety`를 따른다.

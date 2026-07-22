@@ -1,0 +1,88 @@
+---
+description: PickNext 변경 검증, 회귀 테스트 및 완료 보고 규칙
+alwaysApply: true
+---
+
+# PickNext 검증
+
+## 공통 검증
+
+- 변경 범위에 맞는 검증을 반드시 수행한다.
+- 실행하지 않은 테스트를 통과했다고 표현하지 않는다.
+- 신규 실패와 기존 실패를 구분한다.
+- 실패를 기존 문제라고 추정하지 말고 근거를 확인한다.
+- 부분 검증만 수행했으면 그 범위를 명시한다.
+- 작업 범위를 넘어 실패를 임의로 대규모 수정하지 않는다.
+
+## Backend
+
+Backend 변경 시 프로젝트에 존재하는 명령을 확인하고 다음을 수행한다.
+
+- 관련 테스트
+- 전체 Backend 회귀 테스트
+- API 응답 Schema 확인
+- Health Check
+- 필요 시 읽기 전용 실데이터 검증
+- Migration 변경 시 Upgrade·Downgrade 검토
+
+정확한 명령은 현재 `README.md`, Docker Compose, 테스트 구성을 확인한다. 예:
+
+```bash
+docker compose exec backend pytest -q
+```
+
+데이터 삭제·Volume 초기화는 하지 않는다 (`10-data-safety`).
+
+## Frontend
+
+Frontend 변경 시 최소한 다음을 수행한다.
+
+```bash
+cd frontend
+npx tsc --noEmit
+npm run build
+```
+
+프로젝트에 별도 Typecheck Script가 있으면 기존 Script를 우선한다.
+
+필요 시 Dev 서버를 실행해 다음을 확인한다.
+
+- HTTP 200
+- Browser Console
+- Network 요청
+- Vite Proxy
+- Desktop
+- Mobile
+- Navigation
+- Loading·Error·Empty
+- Modal·Sheet
+
+## API 연동
+
+- 실제 요청 경로와 Query String을 확인한다.
+- `false`, `0`, UUID, 검색어 Encoding을 확인한다.
+- 중복 요청과 Infinite Loop를 확인한다.
+- API 오류를 Mock 성공처럼 보이게 하지 않는다.
+- 실제 응답과 화면 표시값을 비교한다.
+
+## DB 안전
+
+- 실데이터 검증은 기본적으로 읽기 전용이다.
+- 테스트를 위해 개발 사용자 데이터를 삭제하거나 재Import하지 않는다.
+- Docker Volume을 삭제하지 않는다.
+
+## 완료 보고
+
+완료 보고에는 최소 다음을 포함한다.
+
+1. 변경 파일
+2. 구현 범위
+3. 미수행 범위
+4. 테스트·빌드 결과
+5. 실제 검증 결과
+6. 수동 검증 여부
+7. 발견된 특이사항
+8. 남은 위험
+9. 다음 권장 작업
+
+요청된 범위를 완료한 후 다음 단계를 자동으로 시작하지 않는다.

@@ -1,0 +1,61 @@
+---
+description: PickNext 설계 계약, 구현 상태 및 변경 이력 문서화 규칙
+globs: "**/*.md"
+alwaysApply: false
+---
+
+# PickNext 문서화
+
+## 상태 구분
+
+문서에는 다음 상태를 명확히 구분한다.
+
+```text
+계획
+계약 확정
+구현 전
+구현 중
+구현 완료
+후속 검토
+비범위
+```
+
+계획 문서를 구현 완료처럼 표현하지 않는다.
+
+## 근거 유지
+
+- 현재 코드와 구현 결과가 달라지면 관련 문서를 함께 갱신한다.
+- 과거 결정과 보정 이력을 삭제하지 않는다.
+- 오래된 설명은 현재 상태와 구분해 기록한다.
+- 현재 수치는 측정 일시와 근거를 함께 기록한다.
+- 변할 수 있는 운영 수치를 일반 규칙처럼 영구 고정하지 않는다.
+
+## 문서 간 일관성
+
+- 제품 범위, 도메인, Migration, API 계약, Frontend 계획 간 충돌을 확인한다.
+- 관련 문서 링크를 유지한다.
+- 파일명을 임의로 변경하지 않는다.
+- 코드에 존재하지 않는 필드나 API를 구현 완료로 추가하지 않는다.
+- Figma Mock의 가정을 실제 DB 모델로 기록하지 않는다.
+- 현재 모델과 다른 향후 필드는 `구현 전` 또는 `예정`으로 표시한다.
+- 코드와 문서가 충돌하면 임의로 대규모 수정하지 말고 충돌을 보고한다.
+
+## 작업 완료 문서
+
+- 변경한 기능과 직접 관련된 문서만 갱신한다.
+- Root README에는 현재 상태를 간략히 기록한다.
+- 세부 개발 이력은 관련 `docs/` 문서에 둔다.
+- 테스트 결과와 미검증 항목을 사실대로 기록한다.
+
+## 주요 문서
+
+| 문서 | 역할 |
+| --- | --- |
+| `docs/01-product-scope.md` | 제품 범위 |
+| `docs/02-domain-model.md` | 도메인 모델 |
+| `docs/03-recommendation-rules.md` | 추천 규칙 |
+| `docs/04-legacy-migration.md` | Legacy Import·보정 |
+| `docs/05-tmdb-integration-plan.md` | TMDB 기획 (구현 전일 수 있음) |
+| `docs/06-frontend-integration-plan.md` | Frontend 연동 계획·상태 |
+| `docs/07-read-api-contract.md` | Category·Item 조회 계약 |
+| `README.md`, `frontend/README.md` | 실행·현재 상태 요약 |
