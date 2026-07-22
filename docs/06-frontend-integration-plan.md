@@ -153,11 +153,11 @@ frontend/
 | TMDB 등록 Form + Category 확인 | UI 존재, 저장은 toast | `POST /items/from-tmdb` |
 | 새 Collection 생성 | 등록 Form에 기존 Collection 선택만 | Form에 「새 Collection」 옵션 추가 (UI 확장 최소) |
 | 평점 0.5 단위 | StarPicker **정수만** | 0.5 UI로 보정 (시각 동일 계열) |
-| 미평가 vs 0점 | `!rating` → 평가 없음 (0도 동일 취급) | `rating: null` vs `0.0` 구분 |
+| 미평가 표시 | Mock은 `!rating`으로 평가 없음 | **현재 API는 `rating=0.0`을 숫자로 반환** → FE가 `0.0`을 「평가 없음」으로 표시. `null` 미사용. 진짜 0점과의 구분은 **후속**에서 `rating` nullable Migration을 별도 검토 |
 | 이력 Snapshot | Mock title 문자열 | Backend history + snapshot |
-| 통계 Backend 집계 | Mock 합산 | stats API |
+| 통계 Backend 집계 | Mock 합산 | `GET /summary` + `GET /categories` |
 | Legacy 7202건, poster NULL | Mock 40건, Placeholder는 Poster 컴포넌트 있음 | 목록 API + Placeholder 유지 |
-| Category UUID | Mock string id | Seed Category UUID 매핑 |
+| Category UUID | Mock string id | API UUID 그대로 사용 (이름 slug 금지) |
 | react-router 미사용 | state 전환 | 점진적 Route 도입 |
 
 ## 8. Backend API 연동 단계 계획
@@ -172,6 +172,8 @@ frontend/
 4. `AppLayout` 추출 (Sidebar/Top/Bottom JSX·className 그대로)
 
 ### Phase B — 읽기 전용 연동
+
+> Backend Phase A-1 읽기 API는 구현됨 (`GET /summary`, `/categories`, `/items`).
 
 5. Categories + Items 목록/상세 (Home·Items·ItemDetail Mock 교체)
 6. Collections 목록/상세

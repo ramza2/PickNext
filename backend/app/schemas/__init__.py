@@ -2,9 +2,10 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.models import CategoryType, ItemStatus, StatusFilter
+from app.services.catalog import ItemSort, SortOrder
 
 
 class ORMModel(BaseModel):
@@ -62,3 +63,87 @@ class RecommendationHistoryItemCreate(BaseModel):
     title_snapshot: str = Field(min_length=1, max_length=300)
     status_at_selection: ItemStatus
     sort_order: int = 0
+
+
+class SummaryResponse(BaseModel):
+    item_count: int
+    planned_count: int
+    completed_count: int
+    collection_count: int
+    category_count: int
+
+
+class CategoryResponse(BaseModel):
+    id: UUID
+    name: str
+    category_type: CategoryType
+    sort_order: int
+    item_count: int
+    planned_count: int
+    completed_count: int
+
+
+class CategoryListResponse(BaseModel):
+    categories: list[CategoryResponse]
+
+
+class CategoryRef(BaseModel):
+    id: UUID
+    name: str
+
+
+class CollectionRef(BaseModel):
+    id: UUID
+    name: str
+
+
+class ItemListItem(BaseModel):
+    id: UUID
+    title: str
+    status: ItemStatus
+    rating: Decimal
+    progress_note: str | None
+    category: CategoryRef
+    collection: CollectionRef | None
+    created_at: datetime
+    updated_at: datetime
+
+    @field_serializer("rating")
+    def serialize_rating(self, value: Decimal) -> float:
+        return float(value)
+
+
+class ItemListResponse(BaseModel):
+    items: list[ItemListItem]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
+
+
+class ItemDetailResponse(ItemListItem):
+    memo: str | None
+
+
+__all__ = [
+    "CategoryCreate",
+    "CategoryListResponse",
+    "CategoryRef",
+    "CategoryResponse",
+    "CollectionCreate",
+    "CollectionRef",
+    "HealthResponse",
+    "ItemCreate",
+    "ItemDetailResponse",
+    "ItemListItem",
+    "ItemListResponse",
+    "ItemSort",
+    "ORMModel",
+    "RecommendationHistoryCreate",
+    "RecommendationHistoryItemCreate",
+    "SortOrder",
+    "SummaryResponse",
+    "UserCreate",
+]

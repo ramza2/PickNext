@@ -98,7 +98,11 @@ memo = NULL
 
 검증식: `7213 = 7202 + 6 + 5`
 
-제목이 DB 컬럼 길이(300자)를 초과하는 항목은 1건 있으며, Import 시 300자로 잘라 저장한다(`title_truncated_count`).
+제목 길이 관련 이력:
+
+* **3차 최초 Import** 당시 `items.title`이 `VARCHAR(300)`이라 300자를 초과한 제목 1건은 절단되어 저장됐다 (`title_truncated_count`).
+* **3.5차 보정**에서 Migration `0003`으로 `items.title`을 `TEXT`로 확장하고, source_id 2209 원본 제목 **321자**로 복구했다.
+* **현재** 신규 Import·분석 로직은 제목을 임의로 절단하지 않는다.
 
 ## Dry-run (2차)
 

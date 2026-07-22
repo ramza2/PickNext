@@ -252,34 +252,28 @@ pytest -q
 
 ## 현재 구현 범위
 
-- Monorepo 골격 (frontend는 README placeholder)
-- SQLAlchemy 도메인 모델 (users, categories, collections, items, recommendation_history*)
-- Alembic 초기 migration
-- 개발용 Seed (멱등)
-- Health Check API (`GET /api/v1/health`)
-- Docker Compose (`backend`, `postgres`) + legacy 볼륨
-- pytest 기반 검증
-- legacy `movie.json` Dry-run 분석·보고서 CLI
-- legacy `movie.json` 실제 Import CLI (`--dry-run` / `--apply`)
-- Import 이력 테이블 (`legacy_import_runs`, `legacy_import_items`, `legacy_import_collections`)
-- Legacy Import 데이터 보정 CLI (`repair_legacy_import_data`)
-- `items.title` TEXT 확장 (Migration `0003_legacy_data_repairs`)
+- Monorepo 골격 + Figma Make Frontend 기준선
+- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0003`)
+- 개발용 Seed (멱등), Health Check API
+- Docker Compose (`backend`, `postgres`)
+- Legacy Dry-run / Import / 보정 CLI
+- **Category·Item 읽기 API** (`GET /summary`, `/categories`, `/items`, `/items/{id}`)
 
 ## 이번 범위에서 제외
 
-- React Frontend / PWA
+- Frontend API 연동 / App.tsx 분리
 - 인증·로그인
-- Category/Item CRUD API
+- Category/Item/Collection 쓰기 API
 - 랜덤 추천·선택·이력 API
 - TMDB API 실제 연동 (기획 문서만 반영)
 - Traefik / 서버 배포
 
 ## 다음 개발 단계
 
-1. TMDB 검색·등록 Backend (`docs/05-tmdb-integration-plan.md`)
-2. Category·Item CRUD API
+1. Frontend 읽기 연동 (`docs/06-frontend-integration-plan.md` Phase A~B)
+2. Category·Item·Collection CRUD API
 3. 랜덤 추천 및 `이걸로 선택` 이력 API
-4. React + TypeScript + Vite Frontend (TMDB 검색·등록 UI 포함)
+4. TMDB Migration·검색·등록 Backend
 5. Traefik 및 운영 배포 설정
 
 설계 문서는 `docs/`를 참고하세요.
@@ -292,3 +286,4 @@ pytest -q
 | `docs/04-legacy-migration.md` | Legacy Import·보정 |
 | `docs/05-tmdb-integration-plan.md` | TMDB 검색·등록 기획 |
 | `docs/06-frontend-integration-plan.md` | Figma Frontend 분석·API 연동 계획 |
+| `docs/07-read-api-contract.md` | Category·Item 조회 API 계약·구현 (Phase A-1) |
