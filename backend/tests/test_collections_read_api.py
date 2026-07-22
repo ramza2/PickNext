@@ -31,7 +31,6 @@ def _item(
     title: str,
     status: ItemStatus,
     collection_id=None,
-    deleted_at=None,
 ) -> Item:
     return Item(
         user_id=user_id,
@@ -40,7 +39,6 @@ def _item(
         title=title,
         status=status,
         rating=Decimal("0.0"),
-        deleted_at=deleted_at,
     )
 
 
@@ -221,23 +219,6 @@ def collection_data(db: Session, owner: User, other_user: User) -> dict:
             title="다른제목만매칭용",
             status=ItemStatus.PLANNED,
         ),
-        _item(
-            user_id=owner.id,
-            category_id=movie.id,
-            collection_id=soft_empty.id,
-            title="삭제된소속",
-            status=ItemStatus.PLANNED,
-            deleted_at=now,
-        ),
-        # Soft-deleted item must not affect bond filters/counts
-        _item(
-            user_id=owner.id,
-            category_id=anime.id,
-            collection_id=bond.id,
-            title="삭제된007애니",
-            status=ItemStatus.COMPLETED,
-            deleted_at=now,
-        ),
         # Standalone item whose title looks like a collection name
         _item(
             user_id=owner.id,
@@ -307,9 +288,7 @@ def test_collections_user_scope(api_client: TestClient, collection_data: dict) -
     assert "빈컬렉션" in names
 
 
-def test_collection_detail_access(
-    api_client: TestClient, collection_data: dict
-) -> None:
+def test_collection_detail_access(api_client: TestClient, collection_data: dict) -> None:
     bond = collection_data["bond"]
     detail = api_client.get(f"/api/v1/collections/{bond.id}")
     assert detail.status_code == 200
@@ -322,18 +301,13 @@ def test_collection_detail_access(
 
     assert api_client.get(f"/api/v1/collections/{uuid4()}").status_code == 404
     assert (
-        api_client.get(f"/api/v1/collections/{collection_data['other_col'].id}").status_code
-        == 404
+        api_client.get(f"/api/v1/collections/{collection_data['other_col'].id}").status_code == 404
     )
     assert api_client.get("/api/v1/collections/not-a-uuid").status_code == 422
 
 
-def test_list_and_detail_same_schema(
-    api_client: TestClient, collection_data: dict
-) -> None:
-    listing = api_client.get(
-        "/api/v1/collections", params={"search": "007 시리즈"}
-    ).json()
+def test_list_and_detail_same_schema(api_client: TestClient, collection_data: dict) -> None:
+    listing = api_client.get("/api/v1/collections", params={"search": "007 시리즈"}).json()
     assert listing["total"] == 1
     listed = listing["collections"][0]
     detail = api_client.get(f"/api/v1/collections/{listed['id']}").json()
@@ -367,22 +341,25 @@ def test_empty_collection(api_client: TestClient, collection_data: dict) -> None
     assert all(row["name"] != "빈컬렉션" for row in by_status["collections"])
 
 
-def test_soft_delete_excluded(api_client: TestClient, collection_data: dict) -> None:
+def test_empty_collection_aggregates_and_filters(
+    api_client: TestClient, collection_data: dict
+) -> None:
+    """Empty collections stay at zero; bond counts reflect existing items only."""
     bond = api_client.get(f"/api/v1/collections/{collection_data['bond'].id}").json()
     assert bond["item_count"] == 2
     assert bond["planned_count"] == 1
     assert bond["completed_count"] == 1
     assert [c["name"] for c in bond["categories"]] == ["영화"]
     assert bond["categories"][0]["item_count"] == 2
+    assert sum(c["item_count"] for c in bond["categories"]) == bond["item_count"]
 
-    soft = api_client.get(
-        f"/api/v1/collections/{collection_data['soft_empty'].id}"
-    ).json()
-    assert soft["item_count"] == 0
-    assert soft["categories"] == []
+    empty = api_client.get(f"/api/v1/collections/{collection_data['soft_empty'].id}").json()
+    assert empty["item_count"] == 0
+    assert empty["planned_count"] == 0
+    assert empty["completed_count"] == 0
+    assert empty["categories"] == []
 
     anime_id = str(collection_data["anime"].id)
-    # Deleted anime item on bond must not match anime filter
     by_anime = api_client.get(
         "/api/v1/collections", params={"category_id": anime_id, "page_size": 100}
     ).json()
@@ -402,9 +379,7 @@ def test_mixed_categories_sorted(api_client: TestClient, collection_data: dict) 
     assert [c["item_count"] for c in mixed["categories"]] == [1, 1, 1]
 
 
-def test_status_filters_keep_full_aggregates(
-    api_client: TestClient, collection_data: dict
-) -> None:
+def test_status_filters_keep_full_aggregates(api_client: TestClient, collection_data: dict) -> None:
     planned = api_client.get(
         "/api/v1/collections", params={"status": "PLANNED", "page_size": 100}
     ).json()
@@ -438,16 +413,12 @@ def test_category_filter_keeps_full_aggregates(
     assert mixed["item_count"] == 3
     assert [c["name"] for c in mixed["categories"]] == ["애니메이션", "애니 영화", "영화"]
 
-    missing = api_client.get(
-        "/api/v1/collections", params={"category_id": str(uuid4())}
-    ).json()
+    missing = api_client.get("/api/v1/collections", params={"category_id": str(uuid4())}).json()
     assert missing["total"] == 0
     assert missing["collections"] == []
 
 
-def test_compound_filter_same_item(
-    api_client: TestClient, collection_data: dict
-) -> None:
+def test_compound_filter_same_item(api_client: TestClient, collection_data: dict) -> None:
     movie_id = str(collection_data["movie"].id)
     # movie + PLANNED: compound has movie/COMPLETED and anime_movie/PLANNED → exclude
     excluded = api_client.get(
@@ -475,9 +446,7 @@ def test_compound_filter_same_item(
     assert compound["completed_count"] == 1
 
 
-def test_search_name_only_and_escape(
-    api_client: TestClient, collection_data: dict
-) -> None:
+def test_search_name_only_and_escape(api_client: TestClient, collection_data: dict) -> None:
     by_name = api_client.get("/api/v1/collections", params={"search": "007"}).json()
     assert by_name["total"] == 1
     assert by_name["collections"][0]["name"] == "007 시리즈"
@@ -486,28 +455,20 @@ def test_search_name_only_and_escape(
     # (only the real collection name match)
     assert by_name["total"] == 1
 
-    literal_pct = api_client.get(
-        "/api/v1/collections", params={"search": "100%"}
-    ).json()
+    literal_pct = api_client.get("/api/v1/collections", params={"search": "100%"}).json()
     assert literal_pct["total"] == 1
     assert literal_pct["collections"][0]["name"] == "100%_escape\\series"
 
-    underscore = api_client.get(
-        "/api/v1/collections", params={"search": "_escape"}
-    ).json()
+    underscore = api_client.get("/api/v1/collections", params={"search": "_escape"}).json()
     assert underscore["total"] == 1
 
-    backslash = api_client.get(
-        "/api/v1/collections", params={"search": "escape\\series"}
-    ).json()
+    backslash = api_client.get("/api/v1/collections", params={"search": "escape\\series"}).json()
     assert backslash["total"] == 1
 
     blank = api_client.get("/api/v1/collections", params={"search": "   "}).json()
     assert blank["total"] == 8
 
-    case_insensitive = api_client.get(
-        "/api/v1/collections", params={"search": "007 시리즈"}
-    ).json()
+    case_insensitive = api_client.get("/api/v1/collections", params={"search": "007 시리즈"}).json()
     assert case_insensitive["total"] == 1
 
 
@@ -515,19 +476,14 @@ def test_validation(api_client: TestClient) -> None:
     assert api_client.get("/api/v1/collections", params={"page": 0}).status_code == 422
     assert api_client.get("/api/v1/collections", params={"page_size": 0}).status_code == 422
     assert api_client.get("/api/v1/collections", params={"page_size": 101}).status_code == 422
-    assert (
-        api_client.get("/api/v1/collections", params={"category_id": "bad"}).status_code
-        == 422
-    )
+    assert api_client.get("/api/v1/collections", params={"category_id": "bad"}).status_code == 422
     assert api_client.get("/api/v1/collections", params={"status": "ALL"}).status_code == 422
     assert api_client.get("/api/v1/collections", params={"sort": "title"}).status_code == 422
     assert api_client.get("/api/v1/collections", params={"order": "up"}).status_code == 422
 
 
 def test_pagination(api_client: TestClient, collection_data: dict) -> None:
-    page1 = api_client.get(
-        "/api/v1/collections", params={"page": 1, "page_size": 3}
-    ).json()
+    page1 = api_client.get("/api/v1/collections", params={"page": 1, "page_size": 3}).json()
     assert page1["page"] == 1
     assert page1["page_size"] == 3
     assert page1["total"] == 8
@@ -536,15 +492,11 @@ def test_pagination(api_client: TestClient, collection_data: dict) -> None:
     assert page1["has_previous"] is False
     assert len(page1["collections"]) == 3
 
-    page2 = api_client.get(
-        "/api/v1/collections", params={"page": 2, "page_size": 3}
-    ).json()
+    page2 = api_client.get("/api/v1/collections", params={"page": 2, "page_size": 3}).json()
     assert page2["has_previous"] is True
     assert page2["has_next"] is True
 
-    over = api_client.get(
-        "/api/v1/collections", params={"page": 99, "page_size": 25}
-    ).json()
+    over = api_client.get("/api/v1/collections", params={"page": 99, "page_size": 25}).json()
     assert over["collections"] == []
     assert over["total"] == 8
     assert over["total_pages"] == 1
@@ -557,12 +509,8 @@ def test_pagination(api_client: TestClient, collection_data: dict) -> None:
     assert filtered["total"] == len(filtered["collections"])
 
 
-def test_default_sort_updated_at_desc(
-    api_client: TestClient, collection_data: dict
-) -> None:
-    payload = api_client.get(
-        "/api/v1/collections", params={"page_size": 100}
-    ).json()
+def test_default_sort_updated_at_desc(api_client: TestClient, collection_data: dict) -> None:
+    payload = api_client.get("/api/v1/collections", params={"page_size": 100}).json()
     updated = [row["updated_at"] for row in payload["collections"]]
     assert updated == sorted(updated, reverse=True)
 
@@ -630,9 +578,7 @@ def test_openapi_includes_collection_paths(api_client: TestClient) -> None:
     paths = api_client.get("/openapi.json").json()["paths"]
     assert "/api/v1/collections" in paths
     assert "/api/v1/collections/{collection_id}" in paths
-    list_params = {
-        p["name"] for p in paths["/api/v1/collections"]["get"]["parameters"]
-    }
+    list_params = {p["name"] for p in paths["/api/v1/collections"]["get"]["parameters"]}
     assert {
         "search",
         "category_id",

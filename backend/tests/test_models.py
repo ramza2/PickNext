@@ -42,7 +42,12 @@ def test_model_creation(db: Session, user: User):
 
     assert item.id is not None
     assert item.collection_id == collection.id
-    assert item.deleted_at is None
+    assert not hasattr(item, "deleted_at")
+    assert "deleted_at" not in Item.__table__.c
+    index_names = {index.name for index in Item.__table__.indexes}
+    assert "ix_items_active" not in index_names
+    assert "ix_items_user_id_category_id" in index_names
+    assert "ix_items_user_id_status" in index_names
 
 
 def test_rating_range_orm_validation(db: Session, user: User):

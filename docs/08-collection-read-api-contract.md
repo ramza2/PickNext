@@ -1,15 +1,16 @@
 # 08. Collection 읽기 API 계약
 
-> **상태:** **Backend 구현 완료 · Frontend 목록·상세 연동 완료 · 쓰기 기능 대기**  
+> **상태:** **Backend 구현 완료 · Frontend 목록·상세 연동 완료 · Soft Delete Schema 제거(D-2) · 쓰기 기능 대기**  
 > **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현, Frontend 목록·상세 연동  
-> **비범위:** Collection·Item 쓰기, Migration, Index 추가
+> **비범위:** Collection·Item 쓰기 DELETE/POST/PATCH, Index 추가
 
 검증 일시: 2026-07-22 (개발 PostgreSQL `picknext`, 읽기 전용).  
 구현 검증: 2026-07-22 — 자동 테스트 + OpenAPI + Seed Smoke Test 완료.  
 Frontend 목록 연동: 2026-07-22 — B-3a.  
-Frontend 상세 연동: 2026-07-22 — B-3b (`useCollectionDetail`, `useCollectionItemsReadData`).
+Frontend 상세 연동: 2026-07-22 — B-3b (`useCollectionDetail`, `useCollectionItemsReadData`).  
+D-2 Schema: 2026-07-22 — `0004_remove_item_soft_delete` (`deleted_at` / `ix_items_active` 제거).
 
-근거: SQLAlchemy Model, Alembic `0001`/`0003`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
+근거: SQLAlchemy Model, Alembic `0001`~`0004`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 
 관련 문서: [02-domain-model](./02-domain-model.md), [03-recommendation-rules](./03-recommendation-rules.md), [06-frontend-integration-plan](./06-frontend-integration-plan.md), [07-read-api-contract](./07-read-api-contract.md).
 
@@ -67,13 +68,13 @@ GET /api/v1/collections/{collection_id}
 4. 페이지 ID `IN (...)` Category 집계 (`sort_order`, `name` 정렬)
 
 - `category_id` / `status` / 복합 필터: **단일 `EXISTS`** (동일 Item AND)
-- `item_count` / `completed_count` 정렬: 활성 Item 집계 subquery `LEFT JOIN` + `COALESCE(..., 0)`
+- `item_count` / `completed_count` 정렬: 존재 Item 집계 subquery `LEFT JOIN` + `COALESCE(..., 0)`
 - 상세: 소유권 조회 1회 + 동일 배치 집계 헬퍼 `_collection_dicts` 재사용
 - N+1: Relationship lazy load 순회 없음 (테스트 Query ≤ 4)
 
 ### 테스트 범위
 
-`test_collections_read_api.py`: 사용자 범위·404/422, 빈 Collection, Soft Delete, 단일·혼재 Category, Status·복합 필터(집계 비축소), 검색 Escape, Validation, 페이지네이션, 전 정렬, ID 보조 정렬, N+1, OpenAPI.
+`test_collections_read_api.py`: 사용자 범위·404/422, 빈 Collection, 단일·혼재 Category, Status·복합 필터(집계 비축소), 검색 Escape, Validation, 페이지네이션, 전 정렬, ID 보조 정렬, N+1, OpenAPI.
 
 ### 검증 결과
 
@@ -98,7 +99,7 @@ GET /api/v1/collections/{collection_id}
 | 항목 | 근거 |
 | --- | --- |
 | DB 구조 | `backend/app/models/__init__.py`, `alembic/versions/0001_initial.py`, 실DB `\d collections` / `\d items` |
-| Soft Delete | Item `deleted_at`만 존재. Collection soft delete 컬럼 없음 |
+| Soft Delete | **제거됨** (D-2 `0004`). Collection soft delete 컬럼 없음 |
 | 실데이터 | Seed `SEED_USER_EMAIL=jchramza@gmail.com` 범위, SELECT만 |
 | Frontend | `frontend/src/app/App.tsx` `CollectionsPage`, `types/mock.ts`, `mocks/data.tsx` |
 | Backend 패턴 | `services/catalog.py`, `api/v1/items.py`·`categories.py`, `schemas`, `tests/test_read_api.py` |
@@ -120,7 +121,7 @@ GET /api/v1/collections/{collection_id}
 | `created_at` | timestamptz | NO | `now()` |
 | `updated_at` | timestamptz | NO | `now()`; ORM `onupdate=func.now()` |
 
-**없음:** `category_id`, `deleted_at`, soft delete 관련 컬럼.
+**없음:** `category_id`, soft delete 관련 컬럼.
 
 **제약·인덱스**
 
@@ -141,28 +142,28 @@ GET /api/v1/collections/{collection_id}
 | --- | --- |
 | `collection_id` | UUID NULL, FK → `collections.id` **ON DELETE RESTRICT** |
 | Index | `ix_items_collection_id` (non-unique) |
-| `deleted_at` | timestamptz NULL — Item soft delete |
+| ~~`deleted_at`~~ | D-2에서 제거 |
 | Soft-delete 부분 Unique Index | **없음** |
-| Soft-delete 부분 Index | `ix_items_active` `(user_id, category_id) WHERE deleted_at IS NULL` — **non-unique** |
+| ~~Soft-delete 부분 Index~~ | `ix_items_active` D-2에서 제거 (`ix_items_user_id_category_id` 유지) |
 | `title` | TEXT (`0003`에서 VARCHAR(300) → TEXT) |
 
 ### 2.3 Collection 삭제 시 Item 처리
 
-- DB: **RESTRICT** — 소속 Item( soft-deleted 포함, FK가 남아 있으면)이 있으면 Collection hard delete 불가.
+- DB: **RESTRICT** — 소속 Item이 있으면 Collection hard delete 불가. 직접 DELETE는 Item≥1 → 409 (쓰기 D-6).
 - Frontend 삭제 다이얼로그 문구(“연결만 해제”)는 **쓰기 정책 희망 문구**이며 현재 FK와 불일치. 읽기 계약 범위 밖 (§17).
 
 ### 2.4 Item 수정 시 Collection `updated_at`
 
 - DB trigger: **없음**
 - ORM: Collection 행을 갱신할 때만 `updated_at` 변경
-- Item INSERT/UPDATE/ soft delete만으로는 Collection `updated_at`이 **자동 갱신되지 않음**
+- Item INSERT/UPDATE/ Hard Delete만으로는 Collection `updated_at`이 **자동 갱신되지 않음**
 - 읽기 정렬·필드는 확정 계약대로 **Collection 자체 `updated_at`만** 사용한다. `MAX(items.updated_at)`은 사용하지 않는다.
 
 ---
 
 ## 3. 실데이터 프로파일 (Seed 사용자)
 
-활성 Item: `Item.deleted_at IS NULL`. 현재 soft-deleted Item **0건**.
+존재하는 Item 전체 집계. Soft Delete 컬럼 없음 (D-2).
 
 ### 3.1 Collection 전체
 
@@ -170,12 +171,12 @@ GET /api/v1/collections/{collection_id}
 | --- | ---: |
 | 전체 Collection | **249** |
 | Item 없는 Collection | **0** |
-| 활성 Item 있는 Collection | **249** |
+| 존재 Item 있는 Collection | **249** |
 | 중복 이름 그룹 | **0** (`uq`와 일치) |
 | 이름 길이 min / max / avg | **1 / 15 / 5.04** (`char_length`) |
-| 활성 Item 중 Collection 연결 | **845 / 7202** |
+| 존재 Item 중 Collection 연결 | **845 / 7202** |
 
-### 3.2 Collection별 활성 Item 규모
+### 3.2 Collection별 존재 Item 규모
 
 | 지표 | 값 |
 | --- | ---: |
@@ -218,7 +219,7 @@ GET /api/v1/collections/{collection_id}
 
 | 분류 | 건수 |
 | --- | ---: |
-| 활성 Item 없음 | 0 |
+| 존재 Item 없음 | 0 |
 | 전부 PLANNED | 100 |
 | 전부 COMPLETED | 87 |
 | 상태 혼합 | 62 |
@@ -346,8 +347,8 @@ GET /api/v1/items?collection_id={collection_id}&sort=title&order=asc
 | `page` | int ≥ 1 | 1 | Offset |
 | `page_size` | int 1~100 | 25 | max 100 |
 | `search` | string | — | Collection **이름만** |
-| `category_id` | UUID | — | 활성 Item 중 해당 Category ≥1 |
-| `status` | `PLANNED` \| `COMPLETED` | — | 활성 Item 중 해당 status ≥1 |
+| `category_id` | UUID | — | 존재 Item 중 해당 Category ≥1 |
+| `status` | `PLANNED` \| `COMPLETED` | — | 존재 Item 중 해당 status ≥1 |
 | `sort` | enum | `updated_at` | 아래 |
 | `order` | `asc` \| `desc` | `desc` | |
 
@@ -414,7 +415,7 @@ Item 목록 Wrapper와 동일 패턴 (`collections` 키만 다름).
 
 ### 7.3 `categories[]`
 
-- 활성 Item만
+- 존재 Item만
 - 혼재 전부 반환, 대표 선택 없음
 - `sum(categories[].item_count) == item_count`
 - 정렬: `Category.sort_order ASC`, `Category.name ASC`
@@ -445,22 +446,22 @@ Item 목록 Wrapper와 동일 패턴 (`collections` 키만 다름).
 
 ### `category_id`
 
-- 포함 조건: 활성 Item 중 `category_id` 일치 ≥ 1 (`EXISTS`)
-- **응답 집계는 Collection 전체 활성 Item** (필터에 매칭된 Item만으로 축소 금지)
+- 포함 조건: 존재 Item 중 `category_id` 일치 ≥ 1 (`EXISTS`)
+- **응답 집계는 Collection 전체 존재 Item** (필터에 매칭된 Item만으로 축소 금지)
 - 유효 UUID지만 Category 없음 / 매칭 Collection 없음 → **200 + 빈 목록**
 
 ### `status`
 
 - 파라미터명 Item API와 동일 `status`
-- 포함 조건: 활성 Item 중 해당 status ≥ 1
-- 응답 집계는 전체 활성 Item 기준
+- 포함 조건: 존재 Item 중 해당 status ≥ 1
+- 응답 집계는 전체 존재 Item 기준
 
 ### `category_id` + `status`
 
-- **동일 활성 Item**이 두 조건을 모두 만족해야 포함 (`EXISTS ... AND category_id AND status`)
+- **동일 존재 Item**이 두 조건을 모두 만족해야 포함 (`EXISTS ... AND category_id AND status`)
 - 서로 다른 Item이 조건을 나눠 만족하는 Collection은 **제외**
 - 예: 영화/COMPLETED + 애니영화/PLANNED만 있으면 `category_id=영화&status=PLANNED`에 **미포함**
-- 포함돼도 응답 집계는 전체 활성 Item
+- 포함돼도 응답 집계는 전체 존재 Item
 
 **축소 금지 예시 (실데이터):** `스타워즈` — 전체 9, 영화만 6. `category_id=영화`로 포함되더라도 `item_count`는 **9**여야 한다.
 
@@ -475,14 +476,14 @@ Item 목록 Wrapper와 동일 패턴 (`collections` 키만 다름).
 | `updated_at` | Collection.`updated_at` |
 | `created_at` | Collection.`created_at` |
 | `name` | Collection.`name` |
-| `item_count` | 활성 Item 수 |
+| `item_count` | 존재 Item 수 |
 | `completed_count` | 활성 COMPLETED 수 |
 
 기본: `sort=updated_at&order=desc`.  
 보조 정렬: 동일 direction의 Collection `id`  
 예: `ORDER BY updated_at DESC, id DESC`.
 
-`item_count` / `completed_count` 정렬 시에도 집계는 활성 Item만, 빈 Collection은 0으로 참여.
+`item_count` / `completed_count` 정렬 시에도 집계는 존재 Item만, 빈 Collection은 0으로 참여.
 
 ### 페이지네이션
 
@@ -491,23 +492,18 @@ Offset. `total_pages = ceil(total / page_size)` (total=0 → 0).
 
 ---
 
-## 10. Soft Delete 정책
+## 10. Item 존재·삭제 정책 (읽기)
 
 ```text
-활성 Item = Item.deleted_at IS NULL
+존재하는 Item = 읽기·집계 대상 (Soft Delete 없음)
 ```
 
-다음에만 활성 Item 사용:
+집계·필터는 DB에 있는 Item 전체를 사용한다.
 
-- `item_count`, `planned_count`, `completed_count`
-- `categories[].item_count`
-- `category_id` / `status` / 복합 필터
-- Collection 상세의 Item 목록 (`GET /items`)
+- Item Hard Delete·Collection 409·마지막 Item 자동 삭제는 쓰기 API(D-3~D-6)
+- Collection 자체 soft delete 없음
+- 빈 Collection은 연결 해제·이동·직접 생성으로 유지 가능
 
-모든 활성 Item이 없어져도 Collection 행은 유지 → 빈 Collection으로 목록·상세 노출.  
-초기 버전 Item 복원 API 없음. Collection 자체 soft delete 없음.
-
----
 
 ## 11. 오류와 사용자 접근 정책
 
@@ -580,18 +576,18 @@ GET /api/v1/items?collection_id={collection_id}&sort=title&order=asc
 
 ## 14. 구현 시 Query 권장 구조
 
-기존 `catalog.py` 패턴을 따른다: Service 함수 + Pydantic 응답, `get_current_user`, soft delete는 `_active_items_filter`와 동일하게 `deleted_at IS NULL`.
+기존 `catalog.py` 패턴: Service 함수 + Pydantic 응답, `get_current_user`. Soft Delete 필터 없음 (D-2).
 
 ### 14.1 목록 (권장: 2~3 쿼리, N+1 금지)
 
 1. **필터된 Collection ID + total + 페이지 슬라이스**  
    - `search` → `name ILIKE`  
-   - `category_id` / `status` → `EXISTS (SELECT 1 FROM items WHERE collection_id = collections.id AND deleted_at IS NULL AND …)`  
+   - `category_id` / `status` → `EXISTS (SELECT 1 FROM items WHERE collection_id = collections.id AND …)`  
    - 복합 필터는 **하나의 EXISTS** 안에 AND  
    - `ORDER BY` + `LIMIT/OFFSET`  
    - `item_count`/`completed_count` 정렬 시 LEFT JOIN 집계 subquery (필터 EXISTS와 분리)
 
-2. **페이지 ID에 대한 상태 집계** (전체 활성 Item)
+2. **페이지 ID에 대한 상태 집계** (전체 존재 Item)
 
 ```sql
 SELECT collection_id,
@@ -599,7 +595,7 @@ SELECT collection_id,
        COUNT(*) FILTER (WHERE status = 'PLANNED') AS planned_count,
        COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed_count
 FROM items
-WHERE user_id = :uid AND deleted_at IS NULL
+WHERE user_id = :uid
   AND collection_id IN (:page_ids)
 GROUP BY collection_id
 ```
@@ -610,7 +606,7 @@ GROUP BY collection_id
 SELECT i.collection_id, c.id, c.name, COUNT(*) AS item_count
 FROM items i
 JOIN categories c ON c.id = i.category_id
-WHERE i.user_id = :uid AND i.deleted_at IS NULL
+WHERE i.user_id = :uid
   AND i.collection_id IN (:page_ids)
 GROUP BY i.collection_id, c.id, c.name, c.sort_order
 ORDER BY c.sort_order, c.name
@@ -642,8 +638,8 @@ ORDER BY c.sort_order, c.name
 | 2 | 다른 사용자 Collection 상세 → 404 |
 | 3 | 존재하지 않는 id → 404 |
 | 4 | 빈 Collection 목록·상세 포함 (`counts=0`, `categories=[]`) |
-| 5 | 활성 Item만 집계 |
-| 6 | `deleted_at` 설정된 Item 제외 |
+| 5 | 존재 Item만 집계 |
+| 6 | (폐기) Soft Delete 제외 — Hard Delete Schema |
 | 7 | 단일 Category `categories` 길이 1 |
 | 8 | 혼재 Category 전부 반환, 합계 = `item_count` |
 | 9 | `categories` 정렬 `sort_order`, `name` |
@@ -663,7 +659,7 @@ ORDER BY c.sort_order, c.name
 | 23 | N+1 방지 (쿼리 수 upper bound / 페이지 크기와 무관한 고정 쿼리 수) |
 | 24 | 목록 요소와 상세의 동일 `CollectionResponse` 필드 |
 | 25 | `page`/`page_size` 경계 422 |
-| 26 | 필터 적용 시에도 응답 집계가 전체 활성 Item 기준 (스타워즈형 fixture) |
+| 26 | 필터 적용 시에도 응답 집계가 전체 존재 Item 기준 (스타워즈형 fixture) |
 
 ---
 
@@ -679,7 +675,7 @@ ORDER BY c.sort_order, c.name
 | Frontend 삭제 문구 | “연결 해제” vs DB `ON DELETE RESTRICT` — **쓰기** 이슈 |
 | Collection `updated_at` | Item 변경 시 미갱신 — 계약이 Collection 컬럼만 쓰도록 이미 확정 |
 | Soft-delete Unique Index | 현재 없음 (TMDB용 부분 unique는 `0004` 예정·미적용). 읽기 계약 의존 없음 |
-| Collection soft delete | 컬럼 없음 — 계약도 Collection soft delete 요구 안 함 |
+| Collection soft delete | 컬럼 없음 — 요구 안 함 |
 | 빈 Collection | 실데이터 0건이나 스키마·LEFT JOIN으로 구현 가능 |
 | `docs/02` | Collection 컬럼 표가 간략함 — 실제는 §2가 우선 |
 
@@ -688,9 +684,9 @@ ORDER BY c.sort_order, c.name
 ## 17. 구현 전 잔여 위험
 
 1. **쓰기 도입 후 “최근 수정” UX:** Item만 바꾸면 Collection 목록 정렬이 안 움직일 수 있음. 읽기 계약은 유지; 필요 시 쓰기에서 Collection touch 또는 별도 정책을 후속으로 논한다 (이번 A/B 재오픈 없음).
-2. **Collection hard delete:** RESTRICT + soft-deleted Item FK 잔존 시 삭제 실패. 쓰기 API 설계 시 SET NULL/unlink 절차 필요.
+2. **Collection hard delete:** Item≥1 → 409. 마지막 Item DELETE 시 Collection 자동 삭제 (docs/09·10).
 3. **Frontend 연동:** `categories[]` 다중 표시, `avgRating` 제거, Item 페이지네이션 UI 추가가 필요할 수 있음.
-4. **대량 성장 시:** collections ≫ 수천, linked items ≫ 수만이면 `(user_id, updated_at)` 또는 `(collection_id) WHERE deleted_at IS NULL` 인덱스 재검토. **현재는 추가 불필요.**
+4. **대량 성장 시:** collections ≫ 수천, linked items ≫ 수만이면 `(user_id, updated_at)` 인덱스 재검토. **현재는 추가 불필요.**
 5. ~~Router/Service 미구현~~ → **Backend 구현 완료** (Frontend 연동은 후속).
 
 ---

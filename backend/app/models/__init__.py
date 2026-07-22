@@ -79,9 +79,7 @@ class User(Base, TimestampMixin):
 
 class Category(Base, TimestampMixin):
     __tablename__ = "categories"
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_categories_user_id_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_categories_user_id_name"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -110,9 +108,7 @@ class Category(Base, TimestampMixin):
 
 class Collection(Base, TimestampMixin):
     __tablename__ = "collections"
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_collections_user_id_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_collections_user_id_name"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -144,12 +140,6 @@ class Item(Base, TimestampMixin):
         ),
         Index("ix_items_user_id_category_id", "user_id", "category_id"),
         Index("ix_items_user_id_status", "user_id", "status"),
-        Index(
-            "ix_items_active",
-            "user_id",
-            "category_id",
-            postgresql_where=text("deleted_at IS NULL"),
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -183,7 +173,6 @@ class Item(Base, TimestampMixin):
     rating: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False)
     progress_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="items")
     category: Mapped[Category] = relationship(back_populates="items")
@@ -334,7 +323,9 @@ class LegacyImportRun(Base):
     source_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     source_total_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    imported_item_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    imported_item_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

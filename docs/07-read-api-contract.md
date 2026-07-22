@@ -37,8 +37,9 @@ Frontend Mock의 `Collection.categoryId`는 DB와 불일치한다. Collection은
 | rating | NUMERIC(2,1) | **NO** | 0.0~5.0, 0.5 단위 Check |
 | progress_note | VARCHAR(200) | YES | |
 | memo | TEXT | YES | |
-| deleted_at | timestamptz | YES | Soft delete |
 | created_at / updated_at | timestamptz | NO | |
+
+> D-2 (`0004_remove_item_soft_delete`): `deleted_at` Soft Delete 컬럼 제거. 존재하는 Item 전체가 읽기·집계 대상.
 
 ### 1.3 Category 컬럼
 
@@ -57,13 +58,13 @@ Frontend Mock의 `Collection.categoryId`는 DB와 불일치한다. Collection은
 - `ix_items_user_id`
 - `ix_items_user_id_category_id`
 - `ix_items_user_id_status`
-- `ix_items_active` (partial: `deleted_at IS NULL`)
 - `ix_items_collection_id`
 - **title 검색용 인덱스 없음**
+- ~~`ix_items_active`~~ — D-2에서 제거 (`ix_items_user_id_category_id`로 충분)
 
 ### 1.5 TMDB 필드
 
-Migration `0004` 미적용. `poster_path`, `external_*` 등 **컬럼 없음**.  
+Migration `0005` 후보 미적용. `poster_path`, `external_*` 등 **컬럼 없음**.  
 A-1 응답에 해당 키를 넣지 않는다 (null placeholder 금지). TMDB 도입 시 스키마 확장.
 
 ### 1.6 Legacy 내부 메타
@@ -120,7 +121,8 @@ A-1 응답에 해당 키를 넣지 않는다 (null placeholder 금지). TMDB 도
 | progress_note | 6908 | **0** | 294 |
 | memo | **7202** | 0 | 0 |
 | created_at / updated_at | 0 | — | 7202 |
-| deleted_at | 7202 (활성) | — | 0 |
+
+> `deleted_at` 컬럼은 D-2에서 제거됨. 프로파일링 당시 Soft Delete 행은 0건이었다.
 
 빈 `progress_note`/`memo`는 현재 없음. API는 빈 문자열을 받으면 **null로 정규화**하는 방향을 쓰기 API에서 채택 예정. 조회는 DB 값을 그대로 반환.
 
@@ -156,7 +158,7 @@ A-1 응답에 해당 키를 넣지 않는다 (null placeholder 금지). TMDB 도
 1. Collection ≠ 단일 Category  
 2. `rating=0.0` 대다수 (표시는 “평가 없음”)  
 3. memo 전무, progress_note는 예능 중심  
-4. Soft delete 미사용 (전부 `deleted_at IS NULL`)  
+4. Soft Delete 미사용 후 D-2에서 `deleted_at` 컬럼 제거  
 5. Category UUID는 Seed마다 달라질 수 있음 → Frontend는 **런타임 API id**만 사용  
 6. 추천 이력 테이블은 비어 있음 (홈 “최근 선택”은 A-1에서 빈 배열 허용)
 
@@ -293,10 +295,10 @@ Query Parameter 없음. 집계는 항상 포함.
 
 예: `sort=updated_at&order=desc` → `ORDER BY updated_at DESC, id DESC`.
 
-### 5.3 Soft delete
+### 5.3 Item 존재 범위
 
-기본: `deleted_at IS NULL`만.  
-삭제 포함 조회 파라미터는 A-1에 두지 않음.
+기본: 현재 사용자 소유의 **존재하는 Item 전체**. Soft Delete / `deleted_at` 필터 없음.  
+미존재·타 사용자 Item 상세는 404.
 
 ---
 
@@ -513,7 +515,8 @@ const QUICK_RECOMMENDATION_PRESETS = {
 - 모든 sort/order + 안정 순서
 - 존재하지 않는 UUID → 빈 목록
 - 잘못된 UUID → 422
-- soft-deleted 제외 (fixture로 1건 삭제 후)
+- 사용자 범위 외 Item 제외
+- 존재하지 않는 Item 상세 404
 
 ### Item 상세
 

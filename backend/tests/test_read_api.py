@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -119,15 +118,6 @@ def catalog_data(db: Session, owner: User, other_user: User) -> dict:
             rating=Decimal("1.0"),
         ),
         Item(
-            user_id=owner.id,
-            category_id=movie.id,
-            collection_id=None,
-            title="삭제된항목",
-            status=ItemStatus.PLANNED,
-            rating=Decimal("0.0"),
-            deleted_at=datetime.now(timezone.utc),
-        ),
-        Item(
             user_id=other_user.id,
             category_id=other_cat.id,
             title="타유저영화",
@@ -144,9 +134,8 @@ def catalog_data(db: Session, owner: User, other_user: User) -> dict:
         "movie": movie,
         "empty": empty,
         "col": col,
-        "items": {item.title: item for item in items if item.deleted_at is None and item.user_id == owner.id},
-        "deleted": items[4],
-        "other_item": items[5],
+        "items": {item.title: item for item in items if item.user_id == owner.id},
+        "other_item": items[4],
         "long_title": long_title,
     }
 
@@ -256,9 +245,7 @@ def test_items_filters(api_client: TestClient, catalog_data: dict) -> None:
     none = api_client.get("/api/v1/items", params={"has_collection": False}).json()
     assert none["total"] == 3
 
-    missing = api_client.get(
-        "/api/v1/items", params={"category_id": str(uuid4())}
-    ).json()
+    missing = api_client.get("/api/v1/items", params={"category_id": str(uuid4())}).json()
     assert missing["total"] == 0
     assert missing["items"] == []
 
@@ -272,9 +259,7 @@ def test_items_filters(api_client: TestClient, catalog_data: dict) -> None:
 
 
 def test_items_sort_stable(api_client: TestClient, catalog_data: dict) -> None:
-    by_title = api_client.get(
-        "/api/v1/items", params={"sort": "title", "order": "asc"}
-    ).json()
+    by_title = api_client.get("/api/v1/items", params={"sort": "title", "order": "asc"}).json()
     titles = [item["title"] for item in by_title["items"]]
     assert titles == sorted(titles)
 
@@ -296,7 +281,18 @@ def test_item_detail(api_client: TestClient, catalog_data: dict) -> None:
 
     assert api_client.get(f"/api/v1/items/{uuid4()}").status_code == 404
     assert api_client.get(f"/api/v1/items/{catalog_data['other_item'].id}").status_code == 404
-    assert api_client.get(f"/api/v1/items/{catalog_data['deleted'].id}").status_code == 404
+
+
+def test_items_include_all_owned_rows(api_client: TestClient, catalog_data: dict) -> None:
+    """Existing owned items are listed; other users remain excluded."""
+    response = api_client.get("/api/v1/items", params={"page_size": 100})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 4
+    titles = {row["title"] for row in payload["items"]}
+    assert "타유저영화" not in titles
+    assert catalog_data["long_title"] in titles
+    assert "007 골드핑거" in titles
 
 
 def test_items_no_n_plus_one(api_client: TestClient, catalog_data: dict, db: Session) -> None:

@@ -38,7 +38,7 @@ TMDB 검색 결과는 **자동 저장하지 않는다.** 사용자가 내용을 
 
 | 영역 | 파일·위치 | 영향 |
 | --- | --- | --- |
-| `items` 테이블 | `backend/app/models/__init__.py`, Alembic | 외부 메타데이터 컬럼 추가 (Migration `0004` 예정) |
+| `items` 테이블 | `backend/app/models/__init__.py`, Alembic | 외부 메타데이터 컬럼 추가 (Migration `0005` 후보) |
 | Pydantic Schema | `backend/app/schemas/__init__.py` | `ItemCreate`, TMDB 전용 요청·응답 모델 추가 |
 | Settings | `backend/app/core/config.py`, `.env.example` | `TMDB_*` 환경변수 추가 |
 | API Router | `backend/app/api/v1/` | `external/tmdb/*`, `items/from-tmdb` 신규 |
@@ -60,7 +60,7 @@ TMDB 검색 결과는 **자동 저장하지 않는다.** 사용자가 내용을 
    Legacy Import는 `(user_id, title)` 중복 스킵 정책이 있었으나, TMDB는 `(user_id, external_source, external_media_type, external_id)`로만 중복 판정한다. 제목이 같아도 TMDB ID가 다르면 별도 Item.
 
 4. **소프트 삭제와 중복**  
-   중복 unique 인덱스는 `deleted_at IS NULL`인 활성 Item에만 적용한다. 삭제된 동일 TMDB Item 재등록은 허용할지 구현 시 명시한다(기본: 허용).
+   중복 unique 인덱스는 `external_id IS NOT NULL`인 Item에 적용한다 (Hard Delete 전제; Soft Delete/`deleted_at` 조건 없음). 동일 TMDB ID 재등록은 409.
 
 ## 3. 검색 범위
 
@@ -155,11 +155,12 @@ external_rating = NULL
 (user_id, external_source, external_media_type, external_id)
 ```
 
-- **부분 Unique Index** (활성 Item만):  
-  `WHERE external_id IS NOT NULL AND deleted_at IS NULL`
+- **부분 Unique Index**:  
+  `WHERE external_id IS NOT NULL`
 - 검색·상세 응답에 `already_registered`, `existing_item_id`, `existing_item_status` 포함
 - 제목만 같은 Legacy Item과는 **자동 중복 처리하지 않음**
 - 중복 등록 API 요청 시 `409 Conflict` 반환
+- Item Hard Delete 후 동일 TMDB ID 재등록은 **새 행으로 허용** (행이 없으므로 Unique 충돌 없음)
 
 ### 5.5 등록 기본값
 
@@ -303,43 +304,26 @@ TMDB Movie·TV 유형을 PickNext Category에 1:1로 매핑하지 않는다.
 | `502` / `503` | TMDB 장애·타임아웃 |
 | `404` | TMDB ID 없음 |
 
-## 10. Alembic Migration 초안 (`0004_tmdb_item_metadata`)
+## 10. Alembic Migration 초안 (`0005_tmdb_item_metadata`)
 
+> **번호 주의:** `0004_remove_item_soft_delete`는 Soft Delete 제거용으로 **이미 적용됨**. TMDB는 **0005** 후보.
 > **이번 단계에서는 실행하지 않는다.** 구현 시 참고용 초안.
 
-```python
-"""Add TMDB external metadata columns to items.
+```text
+Revision ID: 0005_tmdb_item_metadata
+Revises: 0004_remove_item_soft_delete
 
-Revision ID: 0004_tmdb_item_metadata
-Revises: 0003_legacy_data_repairs
-"""
-
-# upgrade() 요약:
-# 1. CREATE TYPE external_source AS ENUM ('TMDB')
-# 2. CREATE TYPE external_media_type AS ENUM ('MOVIE', 'TV')
-# 3. ALTER TABLE items ADD COLUMN external_source external_source NULL
-# 4. ALTER TABLE items ADD COLUMN external_id INTEGER NULL
-# 5. ALTER TABLE items ADD COLUMN external_media_type external_media_type NULL
-# 6. ALTER TABLE items ADD COLUMN poster_path VARCHAR(500) NULL
-# 7. ALTER TABLE items ADD COLUMN overview TEXT NULL
-# 8. ALTER TABLE items ADD COLUMN release_date DATE NULL
-# 9. ALTER TABLE items ADD COLUMN original_title TEXT NULL
-# 10. ALTER TABLE items ADD COLUMN external_rating NUMERIC(3,1) NULL
-# 11. CREATE UNIQUE INDEX uq_items_user_external_active
-#     ON items (user_id, external_source, external_media_type, external_id)
-#     WHERE external_id IS NOT NULL AND deleted_at IS NULL
-# 12. CREATE INDEX ix_items_external_lookup
-#     ON items (user_id, external_source, external_media_type, external_id)
-
-# downgrade(): 역순 DROP INDEX, DROP COLUMN, DROP TYPE
-
-# 데이터: 기존 7,202행은 신규 컬럼 모두 NULL — backfill 없음
+upgrade() 요약:
+1. CREATE TYPE external_source AS ENUM ('TMDB')
+2. CREATE TYPE external_media_type AS ENUM ('MOVIE', 'TV')
+3~10. items에 external_* / poster_path / overview / release_date / original_title / external_rating 추가
+11. CREATE UNIQUE INDEX uq_items_user_external
+    ON items (user_id, external_source, external_media_type, external_id)
+    WHERE external_id IS NOT NULL
 ```
 
-### 제약 조건 (안)
+Hard Delete 전제라 Soft Delete partial 조건(`deleted_at IS NULL`)은 사용하지 않는다.
 
-- `external_source`가 `TMDB`이면 `external_id`, `external_media_type` NOT NULL
-- `external_source`가 NULL이면 외부 필드 전부 NULL (CHECK constraint 또는 애플리케이션 검증)
 
 ## 11. Export·Import 영향
 
@@ -372,7 +356,7 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 | 단계 | 작업 | 산출물 |
 | --- | --- | --- |
-| 1 | Migration `0004` + SQLAlchemy 모델·Enum + Pydantic 스키마 | DB·모델 |
+| 1 | Migration `0005` + SQLAlchemy 모델·Enum + Pydantic 스키마 | DB·모델 |
 | 2 | `Settings` TMDB 환경변수, `.env.example` | 설정 |
 | 3 | `app/services/tmdb/client.py` — HTTP 클라이언트, 타임아웃, 오류 래핑 | 서비스 |
 | 4 | `app/services/tmdb/mapper.py` — TMDB → PickNext DTO 변환 | 서비스 |
@@ -418,7 +402,7 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 ### 14.5 회귀
 
 - Legacy 7,202건 수·상태·Category 분포 불변
-- 추천 후보 쿼리(`deleted_at IS NULL`) TMDB Item 포함 정상
+- 추천 후보 쿼리(존재 Item 전체)에 TMDB Item 포함 정상
 - Import·보정 CLI 무변경
 
 ## 15. 이번 작업에서 수행하지 않은 것

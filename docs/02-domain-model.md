@@ -45,9 +45,10 @@
 | rating | 0.0~5.0, 0.5 단위 |
 | progress_note | 회차·시즌·권수 등 |
 | memo | 감상평·일반 메모 |
-| deleted_at | 소프트 삭제 |
 
-#### TMDB 연동 확장 (구현 전, Migration `0004` 예정)
+Item Index (현재): `ix_items_user_id`, `ix_items_category_id`, `ix_items_collection_id`, `ix_items_user_id_category_id`, `ix_items_user_id_status`. Soft Delete용 `deleted_at` / `ix_items_active`는 Migration `0004_remove_item_soft_delete`에서 제거됨.
+
+#### TMDB 연동 확장 (구현 전, Migration `0005` 후보)
 
 Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NULL`을 유지한다. 자동 TMDB 매칭은 하지 않는다.
 
@@ -62,7 +63,7 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 | original_title | 원제 |
 | external_rating | TMDB 평점 (`items.rating`과 별도, 선택) |
 
-중복 정책: 활성 Item에 대해 `(user_id, external_source, external_media_type, external_id)` unique (부분 인덱스).
+중복 정책: `(user_id, external_source, external_media_type, external_id)` unique (부분 인덱스, `external_id IS NOT NULL`). Hard Delete 전제라 Soft Delete 조건은 쓰지 않는다.
 
 상세: [05-tmdb-integration-plan.md](./05-tmdb-integration-plan.md)
 
@@ -96,4 +97,6 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 - RecommendationHistory 삭제가 Item을 삭제하지 않는다.
 - RecommendationHistoryItem → Item은 `RESTRICT`
 - RecommendationHistoryItem → RecommendationHistory는 `CASCADE`
-- Item은 `deleted_at` 기반 소프트 삭제를 기본으로 한다.
+- Item 삭제는 **Hard Delete**다. `deleted_at` Soft Delete·복원·보관 개념은 없다. (DELETE API는 D-3 이후)
+- Item Hard Delete 시 해당 Item을 포함한 RecommendationHistory **전체**를 선삭제한다. (구현 D-3/D-4)
+- Collection 직접 삭제는 Item이 있으면 409, 마지막 Item DELETE 시 Collection 자동 삭제. (D-5/D-6)

@@ -71,7 +71,7 @@ def get_summary(db: Session, user: User) -> dict[str, int]:
             func.count().label("item_count"),
             func.count().filter(Item.status == ItemStatus.PLANNED).label("planned_count"),
             func.count().filter(Item.status == ItemStatus.COMPLETED).label("completed_count"),
-        ).where(Item.user_id == user.id, Item.deleted_at.is_(None))
+        ).where(Item.user_id == user.id)
     ).one()
     collection_count = db.scalar(
         select(func.count()).select_from(Collection).where(Collection.user_id == user.id)
@@ -96,7 +96,7 @@ def list_categories_with_counts(db: Session, user: User) -> list[dict[str, Any]]
             func.count().filter(Item.status == ItemStatus.PLANNED).label("planned_count"),
             func.count().filter(Item.status == ItemStatus.COMPLETED).label("completed_count"),
         )
-        .where(Item.user_id == user.id, Item.deleted_at.is_(None))
+        .where(Item.user_id == user.id)
         .group_by(Item.category_id)
         .subquery()
     )
@@ -136,12 +136,8 @@ def _validate_collection_filters(params: ItemListParams) -> None:
         )
 
 
-def _active_items_filter(user_id: UUID) -> list[Any]:
-    return [Item.user_id == user_id, Item.deleted_at.is_(None)]
-
-
 def _apply_item_filters(stmt: Select[Any], user: User, params: ItemListParams) -> Select[Any]:
-    stmt = stmt.where(*_active_items_filter(user.id))
+    stmt = stmt.where(Item.user_id == user.id)
 
     if params.category_id is not None:
         stmt = stmt.where(Item.category_id == params.category_id)
@@ -183,12 +179,9 @@ def list_items(db: Session, user: User, params: ItemListParams) -> dict[str, Any
     total_pages = math.ceil(total / params.page_size) if total else 0
     offset = (params.page - 1) * params.page_size
 
-    list_stmt = (
-        select(Item)
-        .options(
-            joinedload(Item.category),
-            joinedload(Item.collection),
-        )
+    list_stmt = select(Item).options(
+        joinedload(Item.category),
+        joinedload(Item.collection),
     )
     list_stmt = _apply_item_filters(list_stmt, user, params)
     list_stmt = _apply_item_sort(list_stmt, params)
@@ -217,7 +210,6 @@ def get_item_detail(db: Session, user: User, item_id: UUID) -> dict[str, Any]:
         .where(
             Item.id == item_id,
             Item.user_id == user.id,
-            Item.deleted_at.is_(None),
         )
     )
     if item is None:
@@ -260,7 +252,6 @@ def _collection_item_exists_clause(
     conditions = [
         Item.collection_id == Collection.id,
         Item.user_id == user_id,
-        Item.deleted_at.is_(None),
     ]
     if category_id is not None:
         conditions.append(Item.category_id == category_id)
@@ -304,7 +295,6 @@ def _collection_status_agg_subquery(user_id: UUID) -> Any:
         )
         .where(
             Item.user_id == user_id,
-            Item.deleted_at.is_(None),
             Item.collection_id.is_not(None),
         )
         .group_by(Item.collection_id)
@@ -353,7 +343,6 @@ def _status_counts_by_collection(
         )
         .where(
             Item.user_id == user.id,
-            Item.deleted_at.is_(None),
             Item.collection_id.in_(collection_ids),
         )
         .group_by(Item.collection_id)
@@ -385,7 +374,6 @@ def _category_counts_by_collection(
         .join(Category, Category.id == Item.category_id)
         .where(
             Item.user_id == user.id,
-            Item.deleted_at.is_(None),
             Item.collection_id.in_(collection_ids),
         )
         .group_by(Item.collection_id, Category.id, Category.name, Category.sort_order)
@@ -415,9 +403,7 @@ def _collection_dicts(
 
     payloads: list[dict[str, Any]] = []
     for collection in collections:
-        item_count, planned_count, completed_count = status_map.get(
-            collection.id, (0, 0, 0)
-        )
+        item_count, planned_count, completed_count = status_map.get(collection.id, (0, 0, 0))
         categories = category_map.get(collection.id, [])
         payloads.append(
             {

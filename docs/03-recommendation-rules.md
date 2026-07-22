@@ -16,7 +16,7 @@
 
 ## 후보 구성
 
-- 소프트 삭제되지 않은 항목(`deleted_at IS NULL`)만 후보에 포함한다.
+- DB에 **존재하는 Item 전체**를 후보에 포함한다. Soft Delete / `deleted_at` 조건은 없다.
 - **동일 컬렉션에 속한 항목은 하나의 추천 후보로 취급**한다.
 - 컬렉션에 속하지 않은 항목은 각각 독립 후보다.
 
@@ -35,6 +35,7 @@
 
 - 추천 이력에서 각 항목의 `item_id`로 상세 화면에 이동할 수 있어야 한다.
 - 상세 화면에서 완료 상태(`PLANNED` ↔ `COMPLETED`)를 수정할 수 있어야 한다.
-- 원본 Item이 소프트 삭제되어도 이력의 snapshot으로 당시 제목을 확인할 수 있다.
+- Item Hard Delete 시 해당 Item을 포함한 `recommendation_history` **전체**와 연결 행을 함께 삭제한다. (연결 행만 남겨 History를 변형하지 않음)
+- DELETE API·History 동반 삭제는 D-3/D-4에서 구현한다. Schema상 Soft Delete는 제거됨(`0004`).
 
 > 참고: 실제 추천/선택 API는 이후 작업에서 구현한다. 본 문서는 도메인 규칙을 고정하기 위한 설계다.
