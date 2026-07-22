@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend Phase B-2b 전체 항목 목록 API 연동 완료  
+> **상태:** Frontend Phase B-2c Item 상세 API 연동 완료  
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (이번 단계):** Item 상세 API, 쓰기 API, Collection/History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (이번 단계):** Item 쓰기 API, Collection/History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -66,7 +66,7 @@ frontend/
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
 
-**Home·Items 목록**은 Backend 읽기 API로 표시한다. Item 상세·추천·Collection·History·TMDB 등은 Mock 유지. API 오류 시 Mock으로 Fallback하지 않는다.
+**Home·Items 목록·Item Detail**은 Backend 읽기 API로 표시한다. 추천·Collection·History·TMDB 등은 Mock 유지. API 오류 시 Mock으로 Fallback하지 않는다.
 
 ## 3. 화면 목록
 
@@ -213,11 +213,19 @@ frontend/
 - 클릭 시 상세 API 미연결 (Toast 안내)
 - Mock 제목 매칭 없음
 
-### Phase B-2c — Item 상세 (다음)
+### Phase B-2c — Item 상세 ✅ 완료
+
+- Items 카드·테이블 / Home 최근 등록 → UUID로 Detail 이동
+- `GET /items/{item_id}` + Loading·404·Error·재시도·Abort
+- Origin 기반 뒤로가기 (Items ↔ Home)
+- Items 검색·필터·정렬·페이지·View Snapshot 보존
+- 수정·상태·삭제 버튼은 안내 Toast (쓰기 미연동)
+- Mock 제목 매칭 없음
+
+### 다음 권장
 
 ```text
-Frontend Phase B-2c
-Item 상세 화면을 GET /items/{item_id}에 연결
+Collection 목록·상세 읽기 API 계약 및 Backend 구현
 ```
 
 ### Phase C — 쓰기·추천·TMDB
@@ -251,7 +259,7 @@ GET /api/v1/items/{item_id}
 | Home Summary / Categories / 최근 등록 | ✅ API |
 | Home 빠른 추천 / 최근 선택 | Mock |
 | Items 목록 | ✅ API |
-| Item 상세 | 미연동 (Toast) |
+| Item 상세 | ✅ API (쓰기 미연동) |
 | Collections / History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
 | 쓰기·추천·TMDB API | 미완료 |
@@ -273,8 +281,7 @@ GET /api/v1/items/{item_id}
 ## 10. 다음 작업 순서
 
 ```text
-Frontend Phase B-2c
-Item 상세 화면을 GET /items/{item_id}에 연결
+Collection 목록·상세 읽기 API 계약 및 Backend 구현
 ```
 
 **금지 유지:** 새 React 프로젝트, App 전면 재작성, Tailwind/색상 체계 교체, Mock 일괄 삭제.

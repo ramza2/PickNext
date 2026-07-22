@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import {
   Home, Search, Shuffle, List, Folder, Clock, Database, Settings,
@@ -31,7 +31,13 @@ import {
 } from "../mocks/data";
 import AppLayout from "./layout/AppLayout";
 import { useHomeReadData } from "./hooks/useHomeReadData";
-import { useItemsReadData } from "./hooks/useItemsReadData";
+import {
+  useItemsReadData,
+  type ItemsPageStateSnapshot,
+  type ItemsQuerySnapshot,
+  type ItemsViewMode,
+} from "./hooks/useItemsReadData";
+import { useItemDetail } from "./hooks/useItemDetail";
 import {
   mapApiCategoryToHomeCategory,
   mapApiItemToHomeRecentItem,
@@ -40,6 +46,10 @@ import {
   displayItemRating,
   mapApiItemToItemsListViewModel,
 } from "./mappers/items";
+import {
+  displayDetailRating,
+  mapApiItemDetailToViewModel,
+} from "./mappers/itemDetail";
 import { formatDate } from "../utils/date";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -523,15 +533,124 @@ function ItemFormModal({ editItem, onClose, onSave, showToast }: {
 
 // ─── Item Detail Page ─────────────────────────────────────────────────────────
 
-function ItemDetailPage({ item, onBack, showToast, onEdit }: {
-  item: Item; onBack: () => void; showToast: (m: string) => void; onEdit: (item: Item) => void;
+function ItemDetailPage({ itemId, onBack, showToast }: {
+  itemId: string | null;
+  onBack: () => void;
+  showToast: (m: string) => void;
 }) {
-  const [status, setStatus]     = useState<Status>(item.status);
-  const [showComplete, setShowComplete] = useState(false);
-  const [showRevert, setShowRevert]     = useState(false);
-  const [showDelete, setShowDelete]     = useState(false);
-  const cat = getCat(item.categoryId);
-  const col = item.collectionId ? getCol(item.collectionId) : null;
+  const { item, isLoading, error, reload } = useItemDetail(itemId);
+
+  if (!itemId) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
+          <ChevronLeft size={16}/> 목록으로
+        </button>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <p className="font-medium text-foreground mb-4">선택된 항목이 없습니다.</p>
+          <button onClick={() => { /* go items via onBack if origin unknown handled in App */ onBack(); }}
+            className="inline-flex items-center gap-1.5 text-sm bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+            목록으로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
+          <ChevronLeft size={16}/> 목록으로
+        </button>
+        <div className="bg-card border border-border rounded-2xl p-6 mb-4">
+          <div className="flex gap-5">
+            <div className="w-32 h-48 rounded-2xl animate-pulse bg-muted flex-shrink-0"/>
+            <div className="flex-1 min-w-0 space-y-3">
+              <div className="h-4 w-24 animate-pulse rounded bg-muted"/>
+              <div className="h-7 w-3/4 animate-pulse rounded bg-muted"/>
+              <div className="h-4 w-32 animate-pulse rounded bg-muted"/>
+              <div className="h-4 w-40 animate-pulse rounded bg-muted"/>
+            </div>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-5 mb-4 space-y-3">
+          {[0,1,2,3].map(i => <div key={i} className="h-4 w-full animate-pulse rounded bg-muted"/>)}
+        </div>
+        <div className="space-y-2.5">
+          {[0,1,2].map(i => <div key={i} className="h-12 w-full animate-pulse rounded-xl bg-muted"/>)}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    const isNotFound = error.status === 404;
+    return (
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
+          <ChevronLeft size={16}/> 목록으로
+        </button>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <p className="font-medium text-foreground mb-2">
+            {isNotFound ? "항목을 찾을 수 없습니다." : "항목 정보를 불러오지 못했습니다."}
+          </p>
+          {isNotFound && (
+            <p className="text-sm text-muted-foreground mb-5">삭제되었거나 접근할 수 없는 항목입니다.</p>
+          )}
+          <div className="flex flex-wrap gap-2 justify-center">
+            {!isNotFound && (
+              <button onClick={reload}
+                className="inline-flex items-center gap-1.5 text-sm bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+                <RefreshCw size={14}/> 다시 시도
+              </button>
+            )}
+            <button onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-sm border border-border text-foreground px-4 py-2 rounded-xl hover:bg-muted transition-colors font-medium">
+              목록으로 돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
+          <ChevronLeft size={16}/> 목록으로
+        </button>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <p className="font-medium text-foreground mb-4">선택된 항목이 없습니다.</p>
+          <button onClick={onBack}
+            className="inline-flex items-center gap-1.5 text-sm bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+            목록으로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const vm = mapApiItemDetailToViewModel(item);
+  const Icon = vm.presentation.icon;
+  const createdLabel = formatDate(vm.createdAt);
+  const updatedLabel = formatDate(vm.updatedAt);
+
+  const detailRows = [
+    {
+      label: "Progress Note",
+      value: vm.progressNote ?? "등록된 진행 정보가 없습니다.",
+      muted: !vm.progressNote,
+    },
+    {
+      label: "메모",
+      value: vm.memo ?? "등록된 메모가 없습니다.",
+      muted: !vm.memo,
+    },
+    { label: "등록일", value: createdLabel || "—", muted: !createdLabel },
+    { label: "수정일", value: updatedLabel || "—", muted: !updatedLabel },
+  ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
@@ -542,116 +661,72 @@ function ItemDetailPage({ item, onBack, showToast, onEdit }: {
       {/* Header */}
       <div className="bg-card border border-border rounded-2xl p-6 mb-4">
         <div className="flex gap-5">
-          <Poster title={item.title} categoryId={item.categoryId} size="lg"/>
+          <div className="w-32 h-48 text-4xl rounded-2xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+            style={{ backgroundColor: vm.presentation.color }}>
+            {vm.title.charAt(0)}
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap gap-1.5 mb-2">
-              <CategoryBadge categoryId={item.categoryId}/>
-              <StatusBadge status={status}/>
-              {item.sourceFrom === "TMDB" && (
-                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded flex items-center gap-1">
-                  <ExternalLink size={10}/> TMDB 연결됨
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 rounded font-medium text-xs px-2 py-0.5"
+                style={{ backgroundColor: vm.presentation.bgColor, color: vm.presentation.color }}>
+                <Icon size={14}/>{vm.categoryName}
+              </span>
+              <StatusBadge status={vm.status}/>
             </div>
-            <h1 className="text-xl font-bold text-foreground leading-tight mb-1">{item.title}</h1>
-            {item.sourceFrom === "TMDB" && <p className="text-xs text-muted-foreground mb-2">{/* originalTitle would go here */}TMDB ID 연결됨</p>}
-            {item.rating !== undefined && <div className="mb-2"><StarRating rating={item.rating}/></div>}
-            {col && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Layers size={12}/><span>Collection: </span>
-                <span className="font-medium text-foreground">{col.name}</span>
-              </div>
-            )}
+            <h1 className="text-xl font-bold text-foreground leading-tight mb-1 break-words">{vm.title}</h1>
+            <div className="mb-2"><StarRating rating={displayDetailRating(vm.rating)}/></div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Layers size={12}/><span>Collection: </span>
+              <span className="font-medium text-foreground">{vm.collectionName ?? "미지정"}</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Details */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden mb-4">
-        {[
-          { label:"출시·방영일", value: item.releaseDate },
-          { label:"Progress Note", value: item.progressNote },
-          { label:"메모", value: item.memo },
-          { label:"등록일", value: item.registeredAt },
-          { label:"수정일", value: item.updatedAt },
-          { label:"외부 출처", value: item.sourceFrom ? `TMDB (${item.sourceType})` : null },
-        ].filter(r => r.value).map((row, i, arr) => (
+        {detailRows.map((row, i, arr) => (
           <div key={row.label} className={`flex gap-4 px-5 py-3 text-sm ${i < arr.length-1?"border-b border-border":""}`}>
             <span className="text-muted-foreground w-28 flex-shrink-0">{row.label}</span>
-            <span className="text-foreground">{row.value}</span>
+            <span className={`min-w-0 break-words ${row.muted ? "text-muted-foreground" : "text-foreground"}`}>{row.value}</span>
           </div>
         ))}
       </div>
 
-      {item.overview && (
-        <div className="bg-card border border-border rounded-2xl p-5 mb-4">
-          <h3 className="text-sm font-semibold text-foreground mb-2">줄거리</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">{item.overview}</p>
-        </div>
-      )}
+      <div className="bg-card border border-border rounded-2xl p-5 mb-4">
+        <h3 className="text-sm font-semibold text-foreground mb-2">줄거리</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">등록된 상세 설명이 없습니다.</p>
+      </div>
 
-      {/* Actions */}
+      {/* Actions — write APIs not connected */}
       <div className="space-y-2.5">
-        <button onClick={() => onEdit(item)}
+        <button onClick={() => showToast("항목 수정 기능은 다음 단계에서 제공됩니다.")}
           className="w-full flex items-center gap-2 justify-center border border-border bg-card text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
           <Edit2 size={15}/> 수정
         </button>
 
-        {status === "PLANNED" ? (
-          <button onClick={() => setShowComplete(true)}
+        {vm.status === "PLANNED" ? (
+          <button onClick={() => showToast("상태 변경 기능은 다음 단계에서 제공됩니다.")}
             className="w-full flex items-center gap-2 justify-center bg-emerald-600 text-white py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors text-sm">
             <Check size={15}/> 완료 처리
           </button>
         ) : (
-          <button onClick={() => setShowRevert(true)}
+          <button onClick={() => showToast("상태 변경 기능은 다음 단계에서 제공됩니다.")}
             className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
             <RefreshCw size={15}/> PLANNED로 되돌리기
           </button>
         )}
 
-        <button className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
+        <button onClick={() => showToast("항목 수정 기능은 다음 단계에서 제공됩니다.")}
+          className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
           <Layers size={15}/> Collection 이동
         </button>
 
-        {item.sourceFrom === "TMDB" && (
-          <button className="w-full flex items-center gap-2 justify-center border border-border text-muted-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
-            <ExternalLink size={15}/> TMDB 정보 보기
-          </button>
-        )}
-
-        <button onClick={() => setShowDelete(true)}
+        <button onClick={() => showToast("항목 삭제 기능은 다음 단계에서 제공됩니다.")}
           className="w-full flex items-center gap-2 justify-center border border-red-200 text-red-600 py-3 rounded-xl font-medium hover:bg-red-50 transition-colors text-sm">
           <Trash2 size={15}/> 삭제
         </button>
       </div>
-
-      {showComplete && (
-        <ConfirmModal
-          title="완료 처리할까요?"
-          body="이 항목을 완료 처리합니다. 완료 날짜는 현재 시각으로 기록됩니다."
-          confirmLabel="완료 처리"
-          onConfirm={() => { setStatus("COMPLETED"); setShowComplete(false); showToast("완료 처리되었습니다."); }}
-          onClose={() => setShowComplete(false)}
-        />
-      )}
-      {showRevert && (
-        <ConfirmModal
-          title="앞으로 볼 항목으로 되돌릴까요?"
-          body="완료 상태를 해제하고 PLANNED로 변경합니다."
-          confirmLabel="되돌리기"
-          onConfirm={() => { setStatus("PLANNED"); setShowRevert(false); showToast("앞으로 볼 항목으로 되돌렸습니다."); }}
-          onClose={() => setShowRevert(false)}
-        />
-      )}
-      {showDelete && (
-        <ConfirmModal
-          title="항목을 삭제할까요?"
-          body={`"${item.title}"을(를) 삭제합니다. 이 작업은 되돌릴 수 없습니다.`}
-          danger confirmLabel="삭제"
-          onConfirm={() => { setShowDelete(false); showToast("항목이 삭제되었습니다."); onBack(); }}
-          onClose={() => setShowDelete(false)}
-        />
-      )}
     </div>
   );
 }
@@ -919,10 +994,11 @@ function HomeSectionError({ message, onRetry }: { message: string; onRetry: () =
   );
 }
 
-function HomePage({ setPage, navigateToRecommend, openAddItem }: {
+function HomePage({ setPage, navigateToRecommend, openAddItem, openItemDetail }: {
   setPage: (p: Page) => void;
   navigateToRecommend: (cats: string[]) => void;
   openAddItem: () => void;
+  openItemDetail: (itemId: string) => void;
 }) {
   // Hook lives in HomePage: App uses conditional page render, so data loads on Home entry
   // and refetches when returning to Home (no cache library in B-2a).
@@ -1052,7 +1128,17 @@ function HomePage({ setPage, navigateToRecommend, openAddItem }: {
               {recent.map(item => {
                 const Icon = item.presentation.icon;
                 return (
-                  <div key={item.id} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
+                  <div key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openItemDetail(item.id)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openItemDetail(item.id);
+                      }
+                    }}
+                    className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer">
                     {/* Placeholder poster — Legacy items have no poster_path */}
                     <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
                       style={{ backgroundColor: item.presentation.color }}>
@@ -1526,10 +1612,29 @@ function RecommendPage({ preselectedCats, showToast }: { preselectedCats: string
 
 // ─── Items Page ───────────────────────────────────────────────────────────────
 
-function ItemsPage({ showToast, openAddItem }: {
+function ItemsPage({
+  showToast,
+  openAddItem,
+  openItemDetail,
+  initialSnapshot,
+  onSnapshotChange,
+}: {
   showToast: (m: string) => void;
   openAddItem: () => void;
+  openItemDetail: (itemId: string) => void;
+  initialSnapshot?: ItemsPageStateSnapshot | null;
+  onSnapshotChange?: (snapshot: ItemsPageStateSnapshot) => void;
 }) {
+  const [tableView, setTableV] = useState(
+    () => (initialSnapshot?.viewMode ?? "card") === "table",
+  );
+  const viewModeRef = useRef<ItemsViewMode>(
+    initialSnapshot?.viewMode ?? "card",
+  );
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const onSnapshotChangeRef = useRef(onSnapshotChange);
+  onSnapshotChangeRef.current = onSnapshotChange;
+
   const {
     categories,
     items,
@@ -1559,10 +1664,31 @@ function ItemsPage({ showToast, openAddItem }: {
     resetFilters,
     reloadItems,
     reloadCategories,
-  } = useItemsReadData();
+  } = useItemsReadData({
+    initialState: initialSnapshot,
+    onQueryChange: (query: ItemsQuerySnapshot) => {
+      onSnapshotChangeRef.current?.({
+        ...query,
+        viewMode: viewModeRef.current,
+      });
+    },
+  });
 
-  const [tableView, setTableV] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const setViewMode = (mode: ItemsViewMode) => {
+    viewModeRef.current = mode;
+    setTableV(mode === "table");
+    onSnapshotChangeRef.current?.({
+      searchInput,
+      appliedSearch,
+      categoryId,
+      status,
+      sort,
+      order,
+      page,
+      pageSize,
+      viewMode: mode,
+    });
+  };
 
   const listItems = items.map(mapApiItemToItemsListViewModel);
   const hasActiveFilters =
@@ -1595,8 +1721,8 @@ function ItemsPage({ showToast, openAddItem }: {
   const toggleAll = () =>
     setSelected(prev => prev.size===listItems.length ? new Set() : new Set(listItems.map(i=>i.id)));
 
-  const onItemActivate = () => {
-    showToast("항목 상세 연동은 다음 단계에서 제공됩니다.");
+  const onItemActivate = (itemId: string) => {
+    openItemDetail(itemId);
   };
 
   const onBulkAction = () => {
@@ -1610,7 +1736,16 @@ function ItemsPage({ showToast, openAddItem }: {
     const Icon = item.presentation.icon;
     return (
       <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer group"
-        onClick={onItemActivate}>
+        role="button"
+        tabIndex={0}
+        aria-label={`${item.title} 상세 보기`}
+        onClick={() => onItemActivate(item.id)}
+        onKeyDown={e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onItemActivate(item.id);
+          }
+        }}>
         <input type="checkbox" checked={selected.has(item.id)}
           onClick={e => { e.stopPropagation(); toggleSelect(item.id); }}
           className="w-3.5 h-3.5 flex-shrink-0 cursor-pointer accent-primary"/>
@@ -1680,11 +1815,11 @@ function ItemsPage({ showToast, openAddItem }: {
               className="w-full pl-8 pr-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"/>
           </div>
           <div className="hidden sm:flex gap-1">
-            <button onClick={() => setTableV(false)}
+            <button onClick={() => setViewMode("card")}
               className={`p-2 rounded-lg border transition-colors ${!tableView?"border-primary bg-blue-50 text-primary":"border-border text-muted-foreground hover:text-foreground"}`}>
               <AlignJustify size={15}/>
             </button>
-            <button onClick={() => setTableV(true)}
+            <button onClick={() => setViewMode("table")}
               className={`p-2 rounded-lg border transition-colors ${tableView?"border-primary bg-blue-50 text-primary":"border-border text-muted-foreground hover:text-foreground"}`}>
               <Grid size={15}/>
             </button>
@@ -1820,7 +1955,16 @@ function ItemsPage({ showToast, openAddItem }: {
                   {listItems.map((item,i) => {
                     const Icon = item.presentation.icon;
                     return (
-                      <tr key={item.id} onClick={onItemActivate}
+                      <tr key={item.id}
+                        onClick={() => onItemActivate(item.id)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onItemActivate(item.id);
+                          }
+                        }}
+                        tabIndex={0}
+                        aria-label={`${item.title} 상세 보기`}
                         className={`border-b border-border hover:bg-muted/20 transition-colors cursor-pointer ${i%2===1?"bg-muted/5":""} ${selected.has(item.id)?"bg-blue-50/50":""}`}>
                         <td className="px-3 py-3" onClick={e=>e.stopPropagation()}>
                           <input type="checkbox" checked={selected.has(item.id)} onChange={()=>toggleSelect(item.id)} className="accent-primary"/>
@@ -2358,9 +2502,19 @@ function SettingsPage({ setPage }: { setPage: (p: Page) => void }) {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
+type ItemDetailOrigin = "items" | "home";
+
+interface ItemDetailSelection {
+  itemId: string;
+  origin: ItemDetailOrigin;
+}
+
 export default function App() {
   const [page, setPage]               = useState<Page>("home");
-  const [selectedItem, setSelectedItem]       = useState<Item | null>(null);
+  const [itemDetailSelection, setItemDetailSelection] =
+    useState<ItemDetailSelection | null>(null);
+  const [itemsSnapshot, setItemsSnapshot] =
+    useState<ItemsPageStateSnapshot | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<HistoryEntry | null>(null);
   const [recommendCats, setRecommendCats]     = useState<string[]>([]);
   const [toast, setToast]                     = useState<string | null>(null);
@@ -2372,23 +2526,63 @@ export default function App() {
     setTimeout(() => setToast(null), 2800);
   }, []);
 
-  const navigateToItem = (item: Item) => { setSelectedItem(item); setPage("item-detail"); };
+  const openItemDetail = useCallback((itemId: string, origin: ItemDetailOrigin) => {
+    setItemDetailSelection({ itemId, origin });
+    setPage("item-detail");
+  }, []);
+
+  const closeItemDetail = useCallback(() => {
+    const destination = itemDetailSelection?.origin ?? "items";
+    setPage(destination);
+    setItemDetailSelection(null);
+  }, [itemDetailSelection]);
+
+  const navigateFromLayout = useCallback((next: Page) => {
+    if (next !== "item-detail") {
+      setItemDetailSelection(null);
+    }
+    setPage(next);
+  }, []);
+
   const navigateToHistory = (h: HistoryEntry) => { setSelectedHistory(h); setPage("history-detail"); };
   const navigateToRecommend = (cats: string[]) => { setRecommendCats(cats); setPage("recommend"); };
   const openAddItem = () => { setEditItemTarget(null); setAddItemOpen(true); };
-  const openEditItem = (item: Item) => { setEditItemTarget(item); setAddItemOpen(true); };
 
   const renderPage = () => {
     switch (page) {
-      case "home":           return <HomePage setPage={setPage} navigateToRecommend={navigateToRecommend} openAddItem={openAddItem}/>;
+      case "home":
+        return (
+          <HomePage
+            setPage={setPage}
+            navigateToRecommend={navigateToRecommend}
+            openAddItem={openAddItem}
+            openItemDetail={(id) => openItemDetail(id, "home")}
+          />
+        );
       case "search":         return <SearchPage showToast={showToast}/>;
       case "recommend":      return <RecommendPage key={recommendCats.join(",")} preselectedCats={recommendCats} showToast={showToast}/>;
-      case "items":          return <ItemsPage showToast={showToast} openAddItem={openAddItem}/>;
+      case "items":
+        return (
+          <ItemsPage
+            showToast={showToast}
+            openAddItem={openAddItem}
+            openItemDetail={(id) => openItemDetail(id, "items")}
+            initialSnapshot={itemsSnapshot}
+            onSnapshotChange={setItemsSnapshot}
+          />
+        );
       case "collections":    return <CollectionsPage showToast={showToast}/>;
       case "history":        return <HistoryPage navigateToHistory={navigateToHistory}/>;
       case "data":           return <DataPage/>;
       case "settings":       return <SettingsPage setPage={setPage}/>;
-      case "item-detail":    return selectedItem ? <ItemDetailPage item={selectedItem} onBack={() => setPage("items")} showToast={showToast} onEdit={openEditItem}/> : null;
+      case "item-detail":
+        return (
+          <ItemDetailPage
+            itemId={itemDetailSelection?.itemId ?? null}
+            onBack={closeItemDetail}
+            showToast={showToast}
+          />
+        );
       case "history-detail": return selectedHistory ? <HistoryDetailPage entry={selectedHistory} onBack={() => setPage("history")} showToast={showToast}/> : null;
       case "category-manage":return <CategoryManagePage onBack={() => setPage("settings")} showToast={showToast}/>;
     }
@@ -2396,7 +2590,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AppLayout currentPage={page} onNavigate={setPage} onAddItem={openAddItem}>
+      <AppLayout currentPage={page} onNavigate={navigateFromLayout} onAddItem={openAddItem}>
         {renderPage()}
       </AppLayout>
 

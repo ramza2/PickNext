@@ -9,6 +9,23 @@ import type {
 } from "../../types/api";
 
 export type ItemsStatusFilter = "ALL" | "PLANNED" | "COMPLETED";
+export type ItemsViewMode = "card" | "table";
+
+/** Query filters persisted across Item Detail navigation. */
+export interface ItemsQuerySnapshot {
+  searchInput: string;
+  appliedSearch: string;
+  categoryId: string | null;
+  status: ItemsStatusFilter;
+  sort: ApiItemSort;
+  order: ApiSortOrder;
+  page: number;
+  pageSize: number;
+}
+
+export interface ItemsPageStateSnapshot extends ItemsQuerySnapshot {
+  viewMode: ItemsViewMode;
+}
 
 export interface ItemsReadDataState {
   categories: ApiCategory[];
@@ -73,23 +90,47 @@ function normalizeSearch(value: string): string {
 
 const DEFAULT_PAGE_SIZE = 25;
 
-export function useItemsReadData(): ItemsReadDataState {
+export interface UseItemsReadDataOptions {
+  initialState?: Partial<ItemsQuerySnapshot> | null;
+  onQueryChange?: (state: ItemsQuerySnapshot) => void;
+}
+
+export function useItemsReadData(
+  options?: UseItemsReadDataOptions,
+): ItemsReadDataState {
+  const initial = options?.initialState;
+  const onQueryChange = options?.onQueryChange;
+
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [items, setItems] = useState<ApiItemListItem[]>([]);
 
-  const [page, setPageState] = useState(1);
-  const [pageSize, setPageSizeState] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPageState] = useState(() => initial?.page ?? 1);
+  const [pageSize, setPageSizeState] = useState(
+    () => initial?.pageSize ?? DEFAULT_PAGE_SIZE,
+  );
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
 
-  const [searchInput, setSearchInputState] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [categoryId, setCategoryIdState] = useState<string | null>(null);
-  const [status, setStatusState] = useState<ItemsStatusFilter>("ALL");
-  const [sort, setSortState] = useState<ApiItemSort>("updated_at");
-  const [order, setOrderState] = useState<ApiSortOrder>("desc");
+  const [searchInput, setSearchInputState] = useState(
+    () => initial?.searchInput ?? "",
+  );
+  const [appliedSearch, setAppliedSearch] = useState(
+    () => initial?.appliedSearch ?? "",
+  );
+  const [categoryId, setCategoryIdState] = useState<string | null>(
+    () => initial?.categoryId ?? null,
+  );
+  const [status, setStatusState] = useState<ItemsStatusFilter>(
+    () => initial?.status ?? "ALL",
+  );
+  const [sort, setSortState] = useState<ApiItemSort>(
+    () => initial?.sort ?? "updated_at",
+  );
+  const [order, setOrderState] = useState<ApiSortOrder>(
+    () => initial?.order ?? "desc",
+  );
 
   const [isItemsLoading, setIsItemsLoading] = useState(true);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
@@ -101,6 +142,8 @@ export function useItemsReadData(): ItemsReadDataState {
   const itemsAbort = useRef<AbortController | null>(null);
   const categoriesAbort = useRef<AbortController | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onQueryChangeRef = useRef(onQueryChange);
+  onQueryChangeRef.current = onQueryChange;
 
   const loadCategories = useCallback(async () => {
     categoriesAbort.current?.abort();
@@ -190,6 +233,28 @@ export function useItemsReadData(): ItemsReadDataState {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    onQueryChangeRef.current?.({
+      searchInput,
+      appliedSearch,
+      categoryId,
+      status,
+      sort,
+      order,
+      page,
+      pageSize,
+    });
+  }, [
+    searchInput,
+    appliedSearch,
+    categoryId,
+    status,
+    sort,
+    order,
+    page,
+    pageSize,
+  ]);
 
   const setSearchInput = useCallback((value: string) => {
     setSearchInputState(value);

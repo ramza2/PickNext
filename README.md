@@ -36,7 +36,7 @@ PickNext/
 │  ├─ alembic/
 │  ├─ tests/
 │  └─ pyproject.toml
-├─ frontend/          # Figma 기준선 + 홈·전체 항목 목록 API 연동
+├─ frontend/          # Figma 기준선 + Home·Items·Item Detail 읽기 API 연동
 ├─ legacy-data/       # 개인 JSON (*.json은 gitignore)
 ├─ migration-report/  # Dry-run 결과 (gitignore)
 ├─ scripts/
@@ -259,11 +259,12 @@ pytest -q
 - Legacy Dry-run / Import / 보정 CLI
 - **Category·Item 읽기 API** (`GET /summary`, `/categories`, `/items`, `/items/{id}`)
 - Frontend Phase B-1 구조 준비 (Proxy·API Client·Mock/Layout 분리)
-- Frontend 홈·전체 항목 목록 읽기 API 연동 완료
+- Frontend Home·Item 목록·Item 상세 읽기 API 연동 완료
 
 ## 이번 범위에서 제외
 
-- Frontend Item 상세 읽기 API 연동 (Phase B-2c)
+- Collection 읽기 API·Frontend 연동
+- Frontend Item 쓰기 API 연동
 - 인증·로그인
 - Category/Item/Collection 쓰기 API
 - 랜덤 추천·선택·이력 API
@@ -272,7 +273,7 @@ pytest -q
 
 ## 다음 개발 단계
 
-1. Frontend Phase B-2c Item 상세 API 연동 (`docs/06-frontend-integration-plan.md`)
+1. Collection 목록·상세 읽기 API 계약 및 Backend 구현
 2. Category·Item·Collection CRUD API
 3. 랜덤 추천 및 `이걸로 선택` 이력 API
 4. TMDB Migration·검색·등록 Backend

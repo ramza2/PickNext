@@ -49,31 +49,33 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | Home — Summary / Categories / 최근 등록 | **API** |
 | Home — 빠른 추천 / 최근 선택 이력 | Mock |
 | Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
-| Item Detail | 미연동 (목록 클릭 시 Toast) |
+| Item Detail | **API** (`GET /items/{id}`) · Poster Placeholder · 수정·삭제·상태 변경 미연동 |
 | Collections / History / Recommend / TMDB / Data / Settings | Mock |
 
-API 오류 시 Mock 숫자로 조용히 Fallback하지 않습니다. 해당 섹션에 오류·재시도를 표시합니다.
+API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
 
 ## 현재 구조
 
 ```text
 src/
-├─ api/           # fetch client + catalog 읽기 함수
-├─ types/         # Api* DTO / Mock 전용 타입
-├─ mocks/         # Figma Mock 데이터
+├─ api/
+├─ types/
+├─ mocks/
 ├─ utils/date.ts
 └─ app/
    ├─ App.tsx
    ├─ hooks/useHomeReadData.ts
    ├─ hooks/useItemsReadData.ts
+   ├─ hooks/useItemDetail.ts
    ├─ mappers/home.ts
    ├─ mappers/items.ts
+   ├─ mappers/itemDetail.ts
    ├─ presentation/categoryPresentation.ts
    ├─ pageTypes.ts
    └─ layout/AppLayout.tsx
 ```
 
-다음: Phase B-2c — Item 상세 API 연동.
+다음: Collection 목록·상세 읽기 API 계약 및 Backend 구현.
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 
