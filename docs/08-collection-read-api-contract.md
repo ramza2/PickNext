@@ -28,7 +28,7 @@ D-6: 2026-07-22 — `DELETE /api/v1/collections/{id}`: Item 0건 → 204 Hard De
 | 소속 Item `GET /items?collection_id=&sort=title&order=asc` | **연동 완료** · 기본 `page_size` · Item 영역 페이지네이션 |
 | 부분 실패 | Collection 성공+Item 실패 → 메타 유지·Item 재시도 / Collection 실패·404 → Item 미표시 |
 | Item 상세 복귀 | `origin=collections` · Collection ID·Item page 복원 · `collectionsSnapshot` 유지 |
-| Collection 쓰기 | **대기** |
+| Collection 쓰기 | Item·Collection **DELETE Backend 완료 (D-3~D-6)** / POST·PATCH·FE 삭제 UI **대기** |
 | 구현 파일 | `getCollection`, `useCollectionDetail`, `useCollectionItemsReadData`, `CollectionDetailInline` |
 
 ```text
@@ -267,13 +267,13 @@ GET /api/v1/collections/{collection_id}
 
 ---
 
-## 4. Frontend 화면 요구 (현황 vs 계약)
+## 4. Frontend 화면 요구 (Mock 기준선 vs 계약)
 
-현재 Collection은 **Mock 전용**. API 연동은 본 단계 비범위.
+Collection 목록·상세 **읽기 API 연동 완료 (B-3a/B-3b)**. 아래 표는 **연동 전 Figma Mock 기준선**과 확정 API 계약의 차이를 기록한다. 현재 Frontend는 Mock 대신 Read API를 사용한다.
 
 ### 4.1 목록 (`CollectionsPage`, `sel === null`)
 
-| 표시/UI | Mock 소스 | 확정 API |
+| 표시/UI | Mock 기준선 (연동 전) | 현재·확정 API |
 | --- | --- | --- |
 | 이름 | `name` | `name` |
 | Category 뱃지 | **단일** `categoryId` slug | **`categories[]`** (혼재 가능) |
@@ -289,9 +289,9 @@ GET /api/v1/collections/{collection_id}
 
 ### 4.2 인라인 상세 (`sel` 설정 시 동일 컴포넌트)
 
-| 표시/UI | 현황 | 확정 연동 |
+| 표시/UI | Mock 기준선 (연동 전) | 현재·확정 연동 |
 | --- | --- | --- |
-| 전환 | `useState<Collection\|null>` 인라인 | 동일 UX 유지 가능 |
+| 전환 | `useState<Collection\|null>` 인라인 | 동일 UX 유지 (B-3b) |
 | 이름·카운트·진행률 | Mock Collection | `GET /collections/{id}` |
 | Category | 단일 뱃지 | `categories[]` 표시로 확장 필요 (연동 시) |
 | avgRating | 표시 | API 미제공 → 연동 시 제거 또는 후속 |
@@ -299,7 +299,7 @@ GET /api/v1/collections/{collection_id}
 | Item 필드 | title, status, progressNote, rating, Poster | Item List API 필드 |
 | 버튼 | Shuffle/Edit/삭제, TMDB추가/직접추가, 완료/제거 | 읽기 연동 범위 밖 (Toast/미연결 유지 가능) |
 
-### 4.3 Mock 구조
+### 4.3 Mock 구조 (연동 전 기준선)
 
 ```ts
 interface Collection {
@@ -315,11 +315,11 @@ interface Collection {
 ```
 
 - `itemIds` 배열 **없음** — Item은 `collectionId`로 역참조
-- Count는 Mock에 **저장** (DB 집계와 다를 수 있음)
-- 상세는 목록에서 선택한 Mock 객체를 그대로 사용 (별도 fetch 없음)
+- Count는 Mock에 **저장** (DB 집계와 다를 수 있음) — **B-3a 이후 API 집계 사용**
+- 상세는 목록에서 선택한 Mock 객체를 그대로 사용 (별도 fetch 없음) — **B-3b 이후 `GET /collections/{id}` + Items API 사용**
 
-**Frontend ≠ 계약인 점:** 단일 `categoryId`, `avgRating`, 상세 Item 일괄 로드, 목록 필터/정렬/페이지 UI 부재.  
-→ **계약을 바꾸지 않는다.** 연동 단계에서 ViewModel 매핑으로 흡수한다.
+**Frontend ≠ 계약이었던 점 (연동 시 흡수):** 단일 `categoryId`, `avgRating`, 상세 Item 일괄 로드, 목록 필터/정렬/페이지 UI 부재.  
+→ **계약을 바꾸지 않았다.** ViewModel 매핑으로 흡수 완료 (읽기). 삭제·생성·수정 UI는 미연동.
 
 ---
 
@@ -676,7 +676,7 @@ ORDER BY c.sort_order, c.name
 
 | 구분 | 내용 |
 | --- | --- |
-| Frontend Mock | 단일 `categoryId`, `avgRating`, Item 일괄 로드 — 계약과 다름. 계약 변경 없음 |
+| Frontend (읽기) | B-3a/B-3b API 연동 완료. `avgRating` 제거·`categories[]` 다중 표시·Item 페이지네이션 적용. 목록 Category/Status 필터 UI는 후속 |
 | Frontend 삭제 문구 | “연결 해제” vs DB `ON DELETE RESTRICT` — **쓰기** 이슈 |
 | Collection `updated_at` | Item 변경 시 미갱신 — 계약이 Collection 컬럼만 쓰도록 이미 확정 |
 | Soft-delete Unique Index | 현재 없음 (TMDB용 부분 unique는 `0004` 예정·미적용). 읽기 계약 의존 없음 |
@@ -719,4 +719,5 @@ ORDER BY c.sort_order, c.name
 | 2026-07-22 | 구현 전 검증 완료, 최종 계약 문서 최초 작성 |
 | 2026-07-22 | Backend 구현·테스트·Smoke 완료, 상태 → **Backend 구현 완료** |
 | 2026-07-22 | Frontend B-3a 목록 연동 완료 · 상세 연동 대기 |
-| 2026-07-22 | Frontend B-3b 인라인 상세·소속 Item 연동 완료 · 쓰기 대기 |
+| 2026-07-22 | Frontend B-3b 인라인 상세·소속 Item 연동 완료 · 쓰기(삭제 UI) 대기 |
+| 2026-07-22 | D-6 Collection 직접 DELETE Backend 완료 · §4 Mock 기준선 문구 정리 |

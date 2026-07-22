@@ -1,8 +1,9 @@
 # 10. Item Hard Delete Migration·삭제 정책 영향 분석
 
-**상태:** Migration·Item Hard Delete Transaction 구현 완료  
+**상태:** Migration·Item·Collection 삭제 Backend 구현 완료  
 **D-2 완료일:** 2026-07-22  
 **D-3~D-5 완료일:** 2026-07-22  
+**D-6 완료일:** 2026-07-22  
 **작성 기준일:** 2026-07-22  
 **연계:** `docs/09-write-api-contract-analysis.md`  
 **비범위 (잔여):** Item/Collection POST·PATCH, Frontend 쓰기

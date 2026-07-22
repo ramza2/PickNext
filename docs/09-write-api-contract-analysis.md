@@ -1,11 +1,12 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Item Hard Delete Backend 구현 완료  
+**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend 구현 완료  
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
 **D-3~D-5 구현:** 2026-07-22 — `DELETE /api/v1/items/{item_id}` Hard Delete Transaction  
-**범위:** Collection·Item 쓰기 계약 분석 + Item Hard Delete 구현  
+**D-6 구현:** 2026-07-22 — `DELETE /api/v1/collections/{collection_id}` (Item≥1 → 409)  
+**범위:** Collection·Item 쓰기 계약 분석 + Item·Collection Hard Delete 구현  
 **비범위:** Item/Collection POST·PATCH, Frontend 쓰기  
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
@@ -170,10 +171,18 @@ Frontend DTO에 `deleted_at` **없음**. “복원” 문구는 **백업 Import 
 
 ---
 
-## 4. 기존 Backend 쓰기 패턴
+## 4. Backend 쓰기 패턴 (현재)
 
-HTTP 쓰기 Router **없음**. `get_db` auto-commit 없음.  
-읽기 Service `catalog.py`는 Soft Delete 필터 없이 `Item.user_id` 범위만 사용 (D-2 완료).
+**구현됨**
+
+- `DELETE /api/v1/items/{item_id}` — `catalog.delete_item`
+- `DELETE /api/v1/collections/{collection_id}` — `catalog.delete_collection`
+- Router는 Service에 Transaction 위임. `get_db` auto-commit **없음** (Service가 명시적 commit/rollback).
+
+**미구현**
+
+- Item/Collection POST·PATCH
+- 읽기 Service `catalog.py`는 Soft Delete 필터 없이 `Item.user_id` 범위만 사용 (D-2 완료).
 
 ---
 

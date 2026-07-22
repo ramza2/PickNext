@@ -82,7 +82,7 @@ A-1 응답에 해당 키를 넣지 않는다 (null placeholder 금지). TMDB 도
 | users | 1 (`jchramza@gmail.com`) |
 | categories | 10 |
 | collections | 249 |
-| items (전체·활성) | **7,202** / deleted 0 |
+| items | **7,202** |
 | recommendation_history | 0 |
 | legacy_import_runs | 1 |
 | legacy_import_items | 7,213 (스킵 포함 매핑) |
