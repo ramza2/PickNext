@@ -1,15 +1,29 @@
 # 08. Collection 읽기 API 계약
 
-> **상태:** **최종 계약 — Backend 구현 완료**  
-> **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현  
-> **비범위:** Frontend 연동, Migration, Index 추가, 쓰기 API
+> **상태:** **Backend 구현 완료 · Frontend 목록 연동 완료 · Frontend 상세 연동 대기**  
+> **범위:** Collection 목록·상세 읽기 API 요청·응답·정책, Query 권장 구조, 테스트, Backend 구현, Frontend 목록 연동  
+> **비범위:** Frontend 상세·Item 연동, Migration, Index 추가, 쓰기 API
 
 검증 일시: 2026-07-22 (개발 PostgreSQL `picknext`, 읽기 전용).  
-구현 검증: 2026-07-22 — 자동 테스트 + OpenAPI + Seed Smoke Test 완료.
+구현 검증: 2026-07-22 — 자동 테스트 + OpenAPI + Seed Smoke Test 완료.  
+Frontend 목록 연동: 2026-07-22 — B-3a (`useCollectionsReadData`, CollectionsPage).
 
 근거: SQLAlchemy Model, Alembic `0001`/`0003`, 실DB `\d`·프로파일·`EXPLAIN ANALYZE`, Frontend `CollectionsPage` JSX/Mock 타입, 기존 Item/Category 읽기 API 패턴.
 
 관련 문서: [02-domain-model](./02-domain-model.md), [03-recommendation-rules](./03-recommendation-rules.md), [06-frontend-integration-plan](./06-frontend-integration-plan.md), [07-read-api-contract](./07-read-api-contract.md).
+
+### Frontend 구현 현황 (B-3a)
+
+| 항목 | 상태 |
+| --- | --- |
+| Collection 목록 `GET /collections` | **연동 완료** |
+| 이름 검색 · Offset 페이지네이션 | **연동 완료** |
+| 다중 Category Badge · 진행률 FE 계산 | **연동 완료** |
+| `averageRating` | 항상 `null` 표시 (`—`), N+1 호출 없음 |
+| Collection 상세 · 소속 Item | **대기 (B-3b)** — 선택 시 목록 메타만 표시, Mock Item 혼합 금지 |
+| 구현 파일 | `frontend/src/api/catalog.ts` `getCollections`, `hooks/useCollectionsReadData.ts`, `mappers/collections.ts`, `App.tsx` CollectionsPage |
+
+Backend 최종 계약(본 문서 §5~§12)은 변경하지 않는다.
 
 ---
 
@@ -611,7 +625,7 @@ ORDER BY c.sort_order, c.name
 
 ## 15. 테스트 필수 항목
 
-테스트 코드는 아직 작성하지 않는다. 구현 시 `test_read_api.py` Fixture/Factory 패턴을 재사용한다.
+구현 전 수립한 테스트 항목이다. Backend 구현 시 `test_collections_read_api.py`에 반영했으며, Fixture/Factory 패턴은 `test_read_api.py`와 동일하다.
 
 | # | 항목 |
 | --- | --- |
@@ -694,3 +708,4 @@ ORDER BY c.sort_order, c.name
 | --- | --- |
 | 2026-07-22 | 구현 전 검증 완료, 최종 계약 문서 최초 작성 |
 | 2026-07-22 | Backend 구현·테스트·Smoke 완료, 상태 → **Backend 구현 완료** |
+| 2026-07-22 | Frontend B-3a 목록 연동 완료 · 상세 연동 대기 |

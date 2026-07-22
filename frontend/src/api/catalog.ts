@@ -2,6 +2,8 @@ import { apiRequest } from "./client";
 import { buildQueryString } from "./query";
 import type {
   ApiCategoriesResponse,
+  ApiCollectionListParams,
+  ApiCollectionListResponse,
   ApiItemDetail,
   ApiItemListParams,
   ApiItemListResponse,
@@ -46,4 +48,20 @@ export function getItem(
     `/items/${encodeURIComponent(itemId)}`,
     { signal },
   );
+}
+
+export function getCollections(
+  params?: ApiCollectionListParams,
+  signal?: AbortSignal,
+): Promise<ApiCollectionListResponse> {
+  const qs = buildQueryString({
+    page: params?.page,
+    page_size: params?.page_size,
+    search: params?.search,
+    category_id: params?.category_id,
+    status: params?.status,
+    sort: params?.sort,
+    order: params?.order,
+  });
+  return apiRequest<ApiCollectionListResponse>(`/collections${qs}`, { signal });
 }

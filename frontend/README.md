@@ -50,7 +50,9 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | Home — 빠른 추천 / 최근 선택 이력 | Mock |
 | Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
 | Item Detail | **API** (`GET /items/{id}`) · Poster Placeholder · 수정·삭제·상태 변경 미연동 |
-| Collections / History / Recommend / TMDB / Data / Settings | Mock |
+| Collections 목록 | **API** (검색·페이지) |
+| Collection 인라인 상세 / 소속 Item | 메타만 표시 · Item 연동 대기 (B-3b) |
+| History / Recommend / TMDB / Data / Settings | Mock |
 
 API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
 
@@ -62,20 +64,23 @@ src/
 ├─ types/
 ├─ mocks/
 ├─ utils/date.ts
+├─ scripts/verify-collections-mapper.mjs
 └─ app/
    ├─ App.tsx
    ├─ hooks/useHomeReadData.ts
    ├─ hooks/useItemsReadData.ts
    ├─ hooks/useItemDetail.ts
+   ├─ hooks/useCollectionsReadData.ts
    ├─ mappers/home.ts
    ├─ mappers/items.ts
    ├─ mappers/itemDetail.ts
+   ├─ mappers/collections.ts
    ├─ presentation/categoryPresentation.ts
    ├─ pageTypes.ts
    └─ layout/AppLayout.tsx
 ```
 
-다음: Collection 목록·상세 읽기 API 계약 및 Backend 구현.
+다음: Collection 인라인 상세 + 소속 Item 읽기 API 연동 (B-3b).
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 

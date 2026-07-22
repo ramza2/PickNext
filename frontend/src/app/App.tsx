@@ -37,6 +37,10 @@ import {
   type ItemsQuerySnapshot,
   type ItemsViewMode,
 } from "./hooks/useItemsReadData";
+import {
+  useCollectionsReadData,
+  type CollectionsQuerySnapshot,
+} from "./hooks/useCollectionsReadData";
 import { useItemDetail } from "./hooks/useItemDetail";
 import {
   mapApiCategoryToHomeCategory,
@@ -46,6 +50,10 @@ import {
   displayItemRating,
   mapApiItemToItemsListViewModel,
 } from "./mappers/items";
+import {
+  mapApiCollectionToListItem,
+  type CollectionListItemViewModel,
+} from "./mappers/collections";
 import {
   displayDetailRating,
   mapApiItemDetailToViewModel,
@@ -2051,38 +2059,130 @@ function ItemsPage({
 
 // ─── Collections Page ─────────────────────────────────────────────────────────
 
-function CollectionsPage({ showToast }: { showToast: (m: string) => void }) {
-  const [sel, setSel]           = useState<Collection | null>(null);
-  const [query, setQuery]       = useState("");
-  const [showDelete, setDelete] = useState(false);
+function CollectionCategoryBadges({
+  categories,
+  sm,
+}: {
+  categories: CollectionListItemViewModel["categories"];
+  sm?: boolean;
+}) {
+  if (categories.length === 0) {
+    return (
+      <span className={`inline-flex items-center rounded font-medium text-muted-foreground bg-muted ${sm?"text-[10px] px-1.5 py-px":"text-xs px-2 py-0.5"}`}>
+        카테고리 없음
+      </span>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {categories.map((category) => {
+        const Icon = category.presentation.icon;
+        return (
+          <span
+            key={category.id}
+            title={`${category.name} ${category.itemCount}개`}
+            className={`inline-flex items-center gap-1 rounded font-medium ${sm?"text-[10px] px-1.5 py-px":"text-xs px-2 py-0.5"}`}
+            style={{
+              backgroundColor: category.presentation.bgColor,
+              color: category.presentation.color,
+            }}
+          >
+            <Icon size={sm ? 10 : 12}/>{category.name}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
-  if (sel) {
-    const colItems = ITEMS.filter(i => i.collectionId===sel.id);
-    const pct = Math.round((sel.completedCount/sel.itemCount)*100);
+function CollectionsPage({
+  showToast,
+  initialSnapshot,
+  onSnapshotChange,
+}: {
+  showToast: (m: string) => void;
+  initialSnapshot?: CollectionsQuerySnapshot | null;
+  onSnapshotChange?: (snapshot: CollectionsQuerySnapshot) => void;
+}) {
+  const [selected, setSelected] = useState<CollectionListItemViewModel | null>(null);
+  const onSnapshotChangeRef = useRef(onSnapshotChange);
+  onSnapshotChangeRef.current = onSnapshotChange;
+
+  const {
+    collections,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasNext,
+    hasPrevious,
+    searchInput,
+    appliedSearch,
+    isLoading,
+    error,
+    setSearchInput,
+    applySearchNow,
+    clearSearch,
+    setPage,
+    reload,
+  } = useCollectionsReadData({
+    initialState: initialSnapshot,
+    onQueryChange: (query) => {
+      onSnapshotChangeRef.current?.(query);
+    },
+  });
+
+  const listItems = useMemo(
+    () => collections.map(mapApiCollectionToListItem),
+    [collections],
+  );
+
+  const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, total);
+
+  if (selected) {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => setSel(null)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5">
+        <button
+          type="button"
+          onClick={() => setSelected(null)}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-5"
+        >
           <ChevronLeft size={16}/> Collection 목록
         </button>
         <div className="bg-card border border-border rounded-2xl p-6 mb-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <CategoryBadge categoryId={sel.categoryId}/>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <CollectionCategoryBadges categories={selected.categories}/>
                 <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-px rounded">Collection</span>
               </div>
-              <h1 className="text-2xl font-bold text-foreground">{sel.name}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{sel.itemCount}개 항목</p>
+              <h1 className="text-2xl font-bold text-foreground break-words">{selected.name}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">{selected.itemCount}개 항목</p>
             </div>
-            <div className="flex gap-2">
-              <button className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="이 Collection에서 추천">
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => showToast("추천 API는 아직 연결되지 않았습니다.")}
+                className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="이 Collection에서 추천"
+              >
                 <Shuffle size={15}/>
               </button>
-              <button className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="수정">
+              <button
+                type="button"
+                onClick={() => showToast("Collection 수정 API는 아직 연결되지 않았습니다.")}
+                className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="수정"
+              >
                 <Edit2 size={15}/>
               </button>
-              <button onClick={() => setDelete(true)}
-                className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors" title="삭제">
+              <button
+                type="button"
+                onClick={() => showToast("Collection 삭제 API는 아직 연결되지 않았습니다.")}
+                className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors"
+                title="삭제"
+              >
                 <Trash2 size={15}/>
               </button>
             </div>
@@ -2090,112 +2190,192 @@ function CollectionsPage({ showToast }: { showToast: (m: string) => void }) {
           <div className="mt-4">
             <div className="flex justify-between text-xs mb-1">
               <span className="text-muted-foreground">진행률</span>
-              <span className="font-semibold">{pct}%</span>
+              <span className="font-semibold">{selected.progressPercent}%</span>
             </div>
-            <ProgressBar value={pct}/>
+            <ProgressBar value={selected.progressPercent}/>
             <div className="flex gap-4 mt-2 text-xs">
-              <span className="text-blue-600">예정 {sel.plannedCount}</span>
-              <span className="text-emerald-600">완료 {sel.completedCount}</span>
-              {sel.avgRating && <span className="flex items-center gap-0.5 text-amber-600"><Star size={10} className="fill-amber-400"/>{sel.avgRating}</span>}
+              <span className="text-blue-600">예정 {selected.plannedCount}</span>
+              <span className="text-emerald-600">완료 {selected.completedCount}</span>
+              <span className="flex items-center gap-0.5 text-muted-foreground">
+                <Star size={10}/>—
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground">항목 목록</h2>
-          <div className="flex gap-2">
-            <button className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1">
-              <Search size={12}/> TMDB 검색 후 추가
-            </button>
-            <button className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1">
-              <Plus size={12}/> 직접 추가
-            </button>
-          </div>
+        <div className="bg-card border border-border rounded-2xl p-6 text-center">
+          <p className="text-sm font-medium text-foreground mb-1">상세 데이터 연동 준비 중</p>
+          <p className="text-xs text-muted-foreground">
+            Collection 메타데이터는 API 목록 응답입니다. 소속 Item 목록은 다음 단계에서 연동됩니다.
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-3 font-mono break-all">id: {selected.id}</p>
         </div>
-
-        {colItems.length === 0 ? (
-          <div className="bg-card border border-border rounded-2xl py-10 text-center text-sm text-muted-foreground">등록된 항목이 없습니다.</div>
-        ) : (
-          <div className="space-y-2">
-            {colItems.map(item => (
-              <div key={item.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-                <Poster title={item.title} categoryId={item.categoryId} size="sm"/>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-foreground text-sm">{item.title}</div>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <StatusBadge status={item.status} sm/>
-                    {item.progressNote && <span className="text-[10px] text-muted-foreground">{item.progressNote}</span>}
-                  </div>
-                  {item.rating && <div className="mt-0.5"><StarRating rating={item.rating} sm/></div>}
-                </div>
-                <div className="flex gap-1.5">
-                  <button className="text-[10px] border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors">완료</button>
-                  <button className="text-[10px] border border-border text-muted-foreground px-2 py-1 rounded-lg hover:bg-muted transition-colors">제거</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {showDelete && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-              <h3 className="font-bold text-foreground mb-2">Collection을 삭제할까요?</h3>
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-800 flex gap-2">
-                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5"/>
-                <p>Collection을 삭제해도 내부 Item은 삭제되지 않습니다. Item의 Collection 연결만 해제됩니다.</p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setDelete(false)}
-                  className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors">취소</button>
-                <button onClick={() => { setDelete(false); setSel(null); showToast("Collection이 삭제되었습니다."); }}
-                  className="flex-1 bg-red-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-red-600 transition-colors">삭제</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
-  const filtered = COLLECTIONS.filter(c => !query || c.name.toLowerCase().includes(query.toLowerCase()));
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-foreground">Collection</h1>
-        <button className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+        <button
+          type="button"
+          onClick={() => showToast("Collection 추가 API는 아직 연결되지 않았습니다.")}
+          className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
           <Plus size={14}/> 추가
         </button>
       </div>
       <div className="relative mb-4">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Collection 검색"
-          className="w-full pl-8 pr-4 py-2 border border-border rounded-xl text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/25"/>
+        <input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") applySearchNow();
+          }}
+          placeholder="Collection 이름 검색"
+          aria-label="Collection 이름 검색"
+          className="w-full pl-8 pr-4 py-2 border border-border rounded-xl text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/25"
+        />
       </div>
-      <p className="text-xs text-muted-foreground mb-4">{filtered.length}개</p>
-      <div className="grid sm:grid-cols-2 gap-4">
-        {filtered.map(col => {
-          const pct = Math.round((col.completedCount/col.itemCount)*100);
-          return (
-            <button key={col.id} onClick={() => setSel(col)}
-              className="bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 hover:shadow-sm transition-all">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <CategoryBadge categoryId={col.categoryId} sm/>
-                  <h3 className="font-semibold text-foreground mt-2 text-sm">{col.name}</h3>
+
+      {error ? (
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <p className="text-sm text-foreground mb-1">Collection 목록을 불러오지 못했습니다.</p>
+          <p className="text-xs text-muted-foreground mb-4">잠시 후 다시 시도해 주세요.</p>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="inline-flex items-center gap-1.5 text-sm text-primary border border-primary/25 px-4 py-2 rounded-xl hover:bg-blue-50 transition-colors"
+          >
+            <RefreshCw size={14}/> 다시 시도
+          </button>
+        </div>
+      ) : isLoading && listItems.length === 0 ? (
+        <div className="bg-card border border-border rounded-2xl py-16 text-center text-sm text-muted-foreground">
+          Collection을 불러오는 중…
+        </div>
+      ) : total === 0 ? (
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          {appliedSearch ? (
+            <>
+              <p className="text-sm text-foreground mb-1">검색 결과가 없습니다.</p>
+              <p className="text-xs text-muted-foreground mb-4">다른 Collection 이름으로 검색해 보세요.</p>
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="text-sm text-primary hover:underline"
+              >
+                검색어 지우기
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-foreground mb-1">등록된 Collection이 없습니다.</p>
+              <p className="text-xs text-muted-foreground">Collection 추가는 이후 단계에서 연결됩니다.</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground mb-4">
+            {total.toLocaleString("ko-KR")}개
+            {appliedSearch ? ` · “${appliedSearch}” 검색` : ""}
+            {isLoading ? " · 갱신 중…" : ""}
+          </p>
+          <div className={`relative grid sm:grid-cols-2 gap-4 ${isLoading ? "opacity-70" : ""}`}>
+            {listItems.map((col) => (
+              <button
+                key={col.id}
+                type="button"
+                onClick={() => setSelected(col)}
+                className="bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div className="min-w-0">
+                    <CollectionCategoryBadges categories={col.categories} sm/>
+                    <h3 className="font-semibold text-foreground mt-2 text-sm truncate">{col.name}</h3>
+                  </div>
+                  <ChevronRight size={15} className="text-muted-foreground mt-1 flex-shrink-0"/>
                 </div>
-                <ChevronRight size={15} className="text-muted-foreground mt-1 flex-shrink-0"/>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {col.itemCount}개 · 예정 {col.plannedCount} · 완료 {col.completedCount}
+                </p>
+                <ProgressBar value={col.progressPercent} className="mb-1.5"/>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>진행률 {col.progressPercent}%</span>
+                  <span className="flex items-center gap-0.5">
+                    <Star size={9} className="text-muted-foreground"/>—
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-5">
+              <p className="text-xs text-muted-foreground">
+                {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}개
+                {totalPages > 0 ? ` · ${page}/${totalPages}페이지` : ""}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  disabled={!hasPrevious}
+                  aria-label="첫 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronsLeft size={14}/>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(page - 1)}
+                  disabled={!hasPrevious}
+                  aria-label="이전 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronLeft size={14}/>
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const p = Math.min(Math.max(page - 2, 1) + i, totalPages);
+                  return (
+                    <button
+                      key={`${p}-${i}`}
+                      type="button"
+                      onClick={() => setPage(p)}
+                      aria-label={`${p}페이지`}
+                      aria-current={page === p ? "page" : undefined}
+                      className={`w-7 h-7 rounded-lg text-xs font-medium border transition-colors ${page === p ? "border-primary bg-primary text-white" : "border-border text-foreground hover:bg-muted"}`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setPage(page + 1)}
+                  disabled={!hasNext}
+                  aria-label="다음 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronRight size={14}/>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  disabled={!hasNext}
+                  aria-label="마지막 페이지"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <ChevronsRight size={14}/>
+                </button>
               </div>
-              <p className="text-xs text-muted-foreground mb-3">{col.itemCount}개 · 예정 {col.plannedCount} · 완료 {col.completedCount}</p>
-              <ProgressBar value={pct} className="mb-1.5"/>
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>진행률 {pct}%</span>
-                {col.avgRating && <span className="flex items-center gap-0.5"><Star size={9} className="fill-amber-400 text-amber-400"/>{col.avgRating}</span>}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -2515,6 +2695,8 @@ export default function App() {
     useState<ItemDetailSelection | null>(null);
   const [itemsSnapshot, setItemsSnapshot] =
     useState<ItemsPageStateSnapshot | null>(null);
+  const [collectionsSnapshot, setCollectionsSnapshot] =
+    useState<CollectionsQuerySnapshot | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<HistoryEntry | null>(null);
   const [recommendCats, setRecommendCats]     = useState<string[]>([]);
   const [toast, setToast]                     = useState<string | null>(null);
@@ -2571,7 +2753,14 @@ export default function App() {
             onSnapshotChange={setItemsSnapshot}
           />
         );
-      case "collections":    return <CollectionsPage showToast={showToast}/>;
+      case "collections":
+        return (
+          <CollectionsPage
+            showToast={showToast}
+            initialSnapshot={collectionsSnapshot}
+            onSnapshotChange={setCollectionsSnapshot}
+          />
+        );
       case "history":        return <HistoryPage navigateToHistory={navigateToHistory}/>;
       case "data":           return <DataPage/>;
       case "settings":       return <SettingsPage setPage={setPage}/>;

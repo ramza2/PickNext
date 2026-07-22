@@ -73,6 +73,50 @@ export interface ApiItemListResponse {
   has_previous: boolean;
 }
 
+export type ApiCollectionSort =
+  | "updated_at"
+  | "created_at"
+  | "name"
+  | "item_count"
+  | "completed_count";
+
+export interface ApiCollectionCategoryCount {
+  id: string;
+  name: string;
+  item_count: number;
+}
+
+export interface ApiCollection {
+  id: string;
+  name: string;
+  item_count: number;
+  planned_count: number;
+  completed_count: number;
+  categories: ApiCollectionCategoryCount[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiCollectionListResponse {
+  collections: ApiCollection[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_previous: boolean;
+}
+
+export interface ApiCollectionListParams {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  category_id?: string;
+  status?: ApiItemStatus;
+  sort?: ApiCollectionSort;
+  order?: ApiSortOrder;
+}
+
 export interface ApiItemListParams {
   page?: number;
   page_size?: number;

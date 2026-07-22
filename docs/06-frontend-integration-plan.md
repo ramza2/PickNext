@@ -66,7 +66,7 @@ frontend/
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
 
-**Home·Items 목록·Item Detail**은 Backend 읽기 API로 표시한다. 추천·Collection·History·TMDB 등은 Mock 유지. API 오류 시 Mock으로 Fallback하지 않는다.
+**Home·Items 목록·Item Detail·Collection 목록**은 Backend 읽기 API로 표시한다. Collection 상세 Item·추천·History·TMDB 등은 Mock 또는 대기. API 오류 시 Mock으로 Fallback하지 않는다.
 
 ## 3. 화면 목록
 
@@ -225,7 +225,7 @@ frontend/
 ### 다음 권장
 
 ```text
-Collection 목록·상세 읽기 API 계약 및 Backend 구현
+Collection 인라인 상세 + 소속 Item 읽기 API 연동 (B-3b)
 ```
 
 ### Phase C — 쓰기·추천·TMDB
@@ -250,6 +250,8 @@ GET /api/v1/summary
 GET /api/v1/categories
 GET /api/v1/items
 GET /api/v1/items/{item_id}
+GET /api/v1/collections
+GET /api/v1/collections/{collection_id}
 ```
 
 ### Frontend 연동 현황
@@ -260,7 +262,9 @@ GET /api/v1/items/{item_id}
 | Home 빠른 추천 / 최근 선택 | Mock |
 | Items 목록 | ✅ API |
 | Item 상세 | ✅ API (쓰기 미연동) |
-| Collections / History / TMDB / Recommend | Mock |
+| Collections 목록 | ✅ API (B-3a) |
+| Collections 상세 · 소속 Item | 대기 (B-3b) |
+| History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
 | 쓰기·추천·TMDB API | 미완료 |
 
@@ -281,7 +285,7 @@ GET /api/v1/items/{item_id}
 ## 10. 다음 작업 순서
 
 ```text
-Collection 목록·상세 읽기 API 계약 및 Backend 구현
+Collection 인라인 상세 + 소속 Item 읽기 API 연동 (B-3b)
 ```
 
 **금지 유지:** 새 React 프로젝트, App 전면 재작성, Tailwind/색상 체계 교체, Mock 일괄 삭제.
