@@ -99,3 +99,33 @@ export function deleteCollection(
     },
   );
 }
+
+export interface CollectionWritePayload {
+  name: string;
+}
+
+export function createCollection(
+  payload: CollectionWritePayload,
+  signal?: AbortSignal,
+): Promise<ApiCollection> {
+  return apiRequest<ApiCollection>("/collections", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function updateCollection(
+  collectionId: string,
+  payload: CollectionWritePayload,
+  signal?: AbortSignal,
+): Promise<ApiCollection> {
+  return apiRequest<ApiCollection>(
+    `/collections/${encodeURIComponent(collectionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+}

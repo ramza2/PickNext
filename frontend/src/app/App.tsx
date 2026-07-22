@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
   Home, Search, Shuffle, List, Folder, Clock, Database, Settings,
   Plus, Star, Film, Tv, BookOpen, Utensils, Smile, AlignJustify,
@@ -62,7 +62,17 @@ import {
   mapApiItemDetailToViewModel,
 } from "./mappers/itemDetail";
 import { formatDate } from "../utils/date";
-import { deleteCollection, deleteItem, getCollection } from "../api/catalog";
+import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection } from "../api/catalog";
+import {
+  collectionCreateFailureToast,
+  collectionPatchNotFoundToast,
+  collectionUpdateFailureToast,
+  collectionWriteConflictInline,
+  collectionWriteValidationInline,
+  isCollectionWriteNetworkOrServerError,
+  normalizeCollectionNameInput,
+  validateCollectionName,
+} from "../api/collectionWriteMessages";
 import { ApiError } from "../api/client";
 import {
   collectionDeleteErrorMessage,
@@ -193,6 +203,127 @@ function ConfirmModal({ title, body, danger, confirmLabel, pending, onConfirm, o
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CollectionFormModal({
+  open,
+  mode,
+  name,
+  pending,
+  validationError,
+  serverError,
+  submitDisabled,
+  onNameChange,
+  onSubmit,
+  onClose,
+}: {
+  open: boolean;
+  mode: "create" | "edit";
+  name: string;
+  pending: boolean;
+  validationError: string | null;
+  serverError: string | null;
+  submitDisabled?: boolean;
+  onNameChange: (value: string) => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const titleId = "collection-form-modal-title";
+  const errorId = "collection-form-modal-error";
+  const isCreate = mode === "create";
+  const normalizedLength = normalizeCollectionNameInput(name).length;
+  const inlineError = validationError ?? serverError;
+
+  useEffect(() => {
+    if (open) {
+      const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [open, mode]);
+
+  useEffect(() => {
+    if (!open || pending) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, pending, onClose]);
+
+  if (!open) return null;
+
+  const handleOverlayClick = () => {
+    if (!pending) onClose();
+  };
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (pending || submitDisabled) return;
+    onSubmit();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 pb-20 sm:pb-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onClick={handleOverlayClick}
+    >
+      <form
+        className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[min(85vh,calc(100dvh-6rem))] overflow-y-auto"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={handleSubmit}
+      >
+        <h3 id={titleId} className="text-base font-bold text-foreground mb-4 break-words">
+          {isCreate ? "새 컬렉션" : "컬렉션 이름 수정"}
+        </h3>
+        <div>
+          <label htmlFor="collection-form-name" className="block text-sm font-medium text-foreground mb-1.5">
+            컬렉션 이름
+          </label>
+          <input
+            ref={inputRef}
+            id="collection-form-name"
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+            placeholder="컬렉션 이름을 입력하세요"
+            disabled={pending}
+            aria-invalid={inlineError ? true : undefined}
+            aria-describedby={inlineError ? errorId : undefined}
+            className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+          />
+          <div className="flex items-start justify-between gap-2 mt-1.5 min-h-[1.25rem]">
+            {inlineError ? (
+              <p id={errorId} className="text-xs text-red-600 break-words">{inlineError}</p>
+            ) : (
+              <span className="text-xs text-transparent select-none" aria-hidden="true">.</span>
+            )}
+            <span className="text-xs text-muted-foreground flex-shrink-0">{normalizedLength}/200</span>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="flex-1 border border-border text-foreground py-2.5 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            취소
+          </button>
+          <button
+            type="submit"
+            disabled={pending || submitDisabled}
+            className="flex-1 bg-primary hover:bg-blue-700 text-white py-2.5 rounded-xl font-medium transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {pending ? (isCreate ? "생성 중..." : "저장 중...") : isCreate ? "생성" : "저장"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -2235,6 +2366,59 @@ function CollectionsPage({
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
 
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createPending, setCreatePending] = useState(false);
+  const [createValidationError, setCreateValidationError] = useState<string | null>(null);
+  const [createServerError, setCreateServerError] = useState<string | null>(null);
+
+  const openCreateModal = () => {
+    setCreateName("");
+    setCreatePending(false);
+    setCreateValidationError(null);
+    setCreateServerError(null);
+    setShowCreateModal(true);
+  };
+
+  const handleCreateNameChange = (value: string) => {
+    setCreateName(value);
+    setCreateValidationError(null);
+    if (createServerError) setCreateServerError(null);
+  };
+
+  const handleCreateSubmit = async () => {
+    const normalizedName = normalizeCollectionNameInput(createName);
+    const validationMessage = validateCollectionName(normalizedName);
+    if (validationMessage) {
+      setCreateValidationError(validationMessage);
+      setCreateServerError(null);
+      return;
+    }
+    if (createPending) return;
+    setCreatePending(true);
+    setCreateValidationError(null);
+    setCreateServerError(null);
+    try {
+      const created = await createCollection({ name: normalizedName });
+      setShowCreateModal(false);
+      await reload();
+      onSelectionChange({ collectionId: created.id, itemsPage: 1 });
+      showToast("컬렉션을 만들었습니다.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setCreateServerError(collectionWriteConflictInline());
+      } else if (err instanceof ApiError && err.status === 422) {
+        setCreateServerError(collectionWriteValidationInline());
+      } else if (isCollectionWriteNetworkOrServerError(err)) {
+        showToast(collectionCreateFailureToast());
+      } else {
+        showToast(collectionCreateFailureToast());
+      }
+    } finally {
+      setCreatePending(false);
+    }
+  };
+
   if (selection) {
     return (
       <CollectionDetailInline
@@ -2248,7 +2432,14 @@ function CollectionsPage({
         showToast={showToast}
         onCollectionDeleted={() => {
           onSelectionChange(null);
-          reload();
+          void reload();
+        }}
+        onCollectionUpdated={() => {
+          void reload();
+        }}
+        onCollectionMissing={() => {
+          onSelectionChange(null);
+          void reload();
         }}
       />
     );
@@ -2260,7 +2451,7 @@ function CollectionsPage({
         <h1 className="text-xl font-bold text-foreground">Collection</h1>
         <button
           type="button"
-          onClick={() => showToast("Collection 추가 API는 아직 연결되지 않았습니다.")}
+          onClick={openCreateModal}
           className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
         >
           <Plus size={14}/> 추가
@@ -2313,7 +2504,14 @@ function CollectionsPage({
           ) : (
             <>
               <p className="text-sm text-foreground mb-1">등록된 Collection이 없습니다.</p>
-              <p className="text-xs text-muted-foreground">Collection 추가는 이후 단계에서 연결됩니다.</p>
+              <p className="text-xs text-muted-foreground mb-4">새 컬렉션을 추가해 보세요.</p>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-1.5 text-sm text-primary border border-primary/25 px-4 py-2 rounded-xl hover:bg-blue-50 transition-colors"
+              >
+                <Plus size={14}/> 새 컬렉션
+              </button>
             </>
           )}
         </div>
@@ -2418,6 +2616,20 @@ function CollectionsPage({
           )}
         </>
       )}
+
+      <CollectionFormModal
+        open={showCreateModal}
+        mode="create"
+        name={createName}
+        pending={createPending}
+        validationError={createValidationError}
+        serverError={createServerError}
+        onNameChange={handleCreateNameChange}
+        onSubmit={() => void handleCreateSubmit()}
+        onClose={() => {
+          if (!createPending) setShowCreateModal(false);
+        }}
+      />
     </div>
   );
 }
@@ -2430,6 +2642,8 @@ function CollectionDetailInline({
   openItemDetail,
   showToast,
   onCollectionDeleted,
+  onCollectionUpdated,
+  onCollectionMissing,
 }: {
   collectionId: string;
   itemsPage: number;
@@ -2441,6 +2655,8 @@ function CollectionDetailInline({
   ) => void;
   showToast: (m: string) => void;
   onCollectionDeleted: () => void;
+  onCollectionUpdated: () => void;
+  onCollectionMissing: () => void;
 }) {
   const {
     collection,
@@ -2452,6 +2668,11 @@ function CollectionDetailInline({
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPending, setEditPending] = useState(false);
+  const [editValidationError, setEditValidationError] = useState<string | null>(null);
+  const [editServerError, setEditServerError] = useState<string | null>(null);
 
   const detailReady = Boolean(collection) && !detailError;
   const {
@@ -2515,6 +2736,66 @@ function CollectionDetailInline({
       }
     } finally {
       setDeletePending(false);
+    }
+  };
+
+  const openEditModal = () => {
+    if (!detailVm || showDeleteConfirm) return;
+    setEditName(detailVm.name);
+    setEditPending(false);
+    setEditValidationError(null);
+    setEditServerError(null);
+    setShowEditModal(true);
+  };
+
+  const handleEditNameChange = (value: string) => {
+    setEditName(value);
+    setEditValidationError(null);
+    if (editServerError) setEditServerError(null);
+  };
+
+  const currentCollectionName = detailVm?.name ?? "";
+  const normalizedEditName = normalizeCollectionNameInput(editName);
+  const editUnchanged = Boolean(detailVm) && normalizedEditName === currentCollectionName;
+
+  const handleEditSubmit = async () => {
+    if (!detailVm || editPending) return;
+    const normalizedName = normalizeCollectionNameInput(editName);
+    const validationMessage = validateCollectionName(normalizedName);
+    if (validationMessage) {
+      setEditValidationError(validationMessage);
+      setEditServerError(null);
+      return;
+    }
+    if (normalizedName === currentCollectionName) {
+      setShowEditModal(false);
+      return;
+    }
+    setEditPending(true);
+    setEditValidationError(null);
+    setEditServerError(null);
+    try {
+      await updateCollection(collectionId, { name: normalizedName });
+      setShowEditModal(false);
+      showToast("컬렉션 이름을 수정했습니다.");
+      void reloadDetail();
+      onCollectionUpdated();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setShowEditModal(false);
+        showToast(collectionPatchNotFoundToast());
+        onCollectionMissing();
+      } else if (err instanceof ApiError && err.status === 409) {
+        setEditServerError(collectionWriteConflictInline());
+      } else if (err instanceof ApiError && err.status === 422) {
+        setEditServerError(collectionWriteValidationInline());
+      } else if (isCollectionWriteNetworkOrServerError(err)) {
+        showToast(collectionUpdateFailureToast());
+      } else {
+        showToast(collectionUpdateFailureToast());
+      }
+    } finally {
+      setEditPending(false);
     }
   };
 
@@ -2618,8 +2899,9 @@ function CollectionDetailInline({
             </button>
             <button
               type="button"
-              onClick={() => showToast("Collection 수정 API는 아직 연결되지 않았습니다.")}
-              className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={openEditModal}
+              disabled={showDeleteConfirm || deletePending}
+              className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               title="수정"
             >
               <Edit2 size={15}/>
@@ -2847,6 +3129,21 @@ function CollectionDetailInline({
           }}
         />
       )}
+
+      <CollectionFormModal
+        open={showEditModal}
+        mode="edit"
+        name={editName}
+        pending={editPending}
+        validationError={editValidationError}
+        serverError={editServerError}
+        submitDisabled={editUnchanged}
+        onNameChange={handleEditNameChange}
+        onSubmit={() => void handleEditSubmit()}
+        onClose={() => {
+          if (!editPending) setShowEditModal(false);
+        }}
+      />
     </div>
   );
 }
