@@ -410,6 +410,131 @@ def delete_collection(
         raise
 
 
+def _is_collection_name_unique_violation(exc: IntegrityError) -> bool:
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        constraint = getattr(orig, "constraint_name", None)
+        if constraint == "uq_collections_user_id_name":
+            return True
+        diag = getattr(orig, "diag", None)
+        if diag is not None:
+            diag_constraint = getattr(diag, "constraint_name", None)
+            if diag_constraint == "uq_collections_user_id_name":
+                return True
+    return "uq_collections_user_id_name" in str(exc)
+
+
+def create_collection(
+    db: Session,
+    user: User,
+    name: str,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Create an empty collection for the user."""
+    existing_id = db.scalar(
+        select(Collection.id).where(
+            Collection.user_id == user.id,
+            Collection.name == name,
+        )
+    )
+    if existing_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Collection name already exists",
+        )
+
+    collection = Collection(user_id=user.id, name=name)
+    try:
+        db.add(collection)
+        db.flush()
+        response = _collection_dicts(db, user, [collection])[0]
+        if commit:
+            db.commit()
+        return response
+    except HTTPException:
+        if commit:
+            db.rollback()
+        raise
+    except IntegrityError as exc:
+        if commit:
+            db.rollback()
+        if _is_collection_name_unique_violation(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Collection name already exists",
+            ) from exc
+        raise
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
+def update_collection(
+    db: Session,
+    user: User,
+    collection_id: UUID,
+    name: str,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Rename a collection owned by the user."""
+    collection = db.scalar(
+        select(Collection)
+        .where(Collection.id == collection_id, Collection.user_id == user.id)
+        .with_for_update()
+    )
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Collection not found",
+        )
+
+    if collection.name == name:
+        if commit:
+            db.commit()
+        return _collection_dicts(db, user, [collection])[0]
+
+    conflict_id = db.scalar(
+        select(Collection.id).where(
+            Collection.user_id == user.id,
+            Collection.name == name,
+            Collection.id != collection_id,
+        )
+    )
+    if conflict_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Collection name already exists",
+        )
+
+    collection.name = name
+    try:
+        db.flush()
+        response = _collection_dicts(db, user, [collection])[0]
+        if commit:
+            db.commit()
+        return response
+    except HTTPException:
+        if commit:
+            db.rollback()
+        raise
+    except IntegrityError as exc:
+        if commit:
+            db.rollback()
+        if _is_collection_name_unique_violation(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Collection name already exists",
+            ) from exc
+        raise
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
 def _category_ref(category: Category) -> dict[str, Any]:
     return {"id": category.id, "name": category.name}
 

@@ -101,5 +101,6 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 - `DELETE /api/v1/items/{item_id}` 구현 완료 (D-3~D-5): 추천 이력 전체 선삭제 → Item 삭제 → 마지막이면 Collection 자동 삭제
 - `DELETE /api/v1/collections/{collection_id}` 구현 완료 (D-6): Item **0건** → Collection Hard Delete / Item **1건 이상** → **409** (Item unlink·Cascade 없음)
 - Frontend DELETE Dialog·origin 복귀 연동 완료 (D-7), D-8 회귀·Smoke 검증 완료
+- `POST /api/v1/collections` · `PATCH /api/v1/collections/{collection_id}` Backend 구현 완료 (C-1): 이름 Trim·최대 200자·동일 사용자 이름 Unique·빈 Collection 생성 허용·PATCH no-op 시 `updated_at` 불변
 - RecommendationHistoryItem → Item은 `RESTRICT`
 - RecommendationHistoryItem → RecommendationHistory는 `CASCADE`

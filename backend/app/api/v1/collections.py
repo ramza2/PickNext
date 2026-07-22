@@ -6,11 +6,35 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models import ItemStatus, User
-from app.schemas import CollectionListResponse, CollectionResponse, CollectionSort, SortOrder
+from app.schemas import (
+    CollectionCreate,
+    CollectionListResponse,
+    CollectionResponse,
+    CollectionSort,
+    CollectionUpdate,
+    SortOrder,
+)
 from app.services import catalog
 from app.services.catalog import CollectionListParams
 
 router = APIRouter(tags=["collections"])
+
+
+@router.post(
+    "/collections",
+    response_model=CollectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        409: {"description": "Collection name already exists"},
+        422: {"description": "Validation Error"},
+    },
+)
+def create_collection(
+    payload: CollectionCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CollectionResponse:
+    return CollectionResponse(**catalog.create_collection(db, user, payload.name))
 
 
 @router.get("/collections", response_model=CollectionListResponse)
@@ -48,6 +72,24 @@ def read_collection_detail(
     user: User = Depends(get_current_user),
 ) -> CollectionResponse:
     return CollectionResponse(**catalog.get_collection_detail(db, user, collection_id))
+
+
+@router.patch(
+    "/collections/{collection_id}",
+    response_model=CollectionResponse,
+    responses={
+        404: {"description": "Collection not found"},
+        409: {"description": "Collection name already exists"},
+        422: {"description": "Validation Error"},
+    },
+)
+def update_collection(
+    collection_id: UUID,
+    payload: CollectionUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CollectionResponse:
+    return CollectionResponse(**catalog.update_collection(db, user, collection_id, payload.name))
 
 
 @router.delete(

@@ -29,8 +29,35 @@ class CategoryCreate(BaseModel):
     sort_order: int = 0
 
 
+def _normalize_collection_name(value: object) -> str:
+    if value is None:
+        raise ValueError("name must not be empty")
+    if not isinstance(value, str):
+        raise TypeError("name must be a string")
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("name must not be empty")
+    if len(normalized) > 200:
+        raise ValueError("name must be at most 200 characters")
+    return normalized
+
+
 class CollectionCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: str
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def normalize_name(cls, value: object) -> str:
+        return _normalize_collection_name(value)
+
+
+class CollectionUpdate(BaseModel):
+    name: str
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def normalize_name(cls, value: object) -> str:
+        return _normalize_collection_name(value)
 
 
 class ItemCreate(BaseModel):
@@ -165,6 +192,7 @@ __all__ = [
     "CollectionRef",
     "CollectionResponse",
     "CollectionSort",
+    "CollectionUpdate",
     "HealthResponse",
     "ItemCreate",
     "ItemDetailResponse",
