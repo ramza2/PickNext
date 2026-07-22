@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend Phase B-2a 홈 읽기 API 연동 완료  
+> **상태:** Frontend Phase B-2b 전체 항목 목록 API 연동 완료  
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (이번 단계):** 전체 Item 목록·상세 API, Collection/History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (이번 단계):** Item 상세 API, 쓰기 API, Collection/History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -66,7 +66,7 @@ frontend/
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
 
-**Home**은 Summary·Categories·최근 등록을 Backend API로 표시한다. 그 외 화면은 Mock 유지. API 오류 시 Mock으로 Fallback하지 않는다.
+**Home·Items 목록**은 Backend 읽기 API로 표시한다. Item 상세·추천·Collection·History·TMDB 등은 Mock 유지. API 오류 시 Mock으로 Fallback하지 않는다.
 
 ## 3. 화면 목록
 
@@ -204,18 +204,21 @@ frontend/
 - 빠른 추천·History·기타 화면은 Mock 유지
 - 최근 등록 카드는 **클릭 없음**(원본과 동일). 상세 API 미연결
 
-### Phase B-2b — 전체 항목 목록 (다음)
+### Phase B-2b — 전체 항목 목록 ✅ 완료
+
+- `GET /items` 서버 측 검색·필터·정렬·페이지네이션
+- Category UUID 필터 (`GET /categories`)
+- 카드·테이블 동일 API 데이터, View 전환 시 재호출 없음
+- Loading·Error·Empty, Abort·Race 방지
+- 클릭 시 상세 API 미연결 (Toast 안내)
+- Mock 제목 매칭 없음
+
+### Phase B-2c — Item 상세 (다음)
 
 ```text
-Frontend Phase B-2b
-전체 항목 목록을 Backend GET /items에 연결
+Frontend Phase B-2c
+Item 상세 화면을 GET /items/{item_id}에 연결
 ```
-
-### Phase B-2c 이후
-
-- Item 상세 `GET /items/{id}`
-- Collections / History 읽기
-- Loading·Error UI 확장
 
 ### Phase C — 쓰기·추천·TMDB
 
@@ -247,7 +250,8 @@ GET /api/v1/items/{item_id}
 | --- | --- |
 | Home Summary / Categories / 최근 등록 | ✅ API |
 | Home 빠른 추천 / 최근 선택 | Mock |
-| Items 목록·상세 | Mock |
+| Items 목록 | ✅ API |
+| Item 상세 | 미연동 (Toast) |
 | Collections / History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
 | 쓰기·추천·TMDB API | 미완료 |
@@ -269,8 +273,8 @@ GET /api/v1/items/{item_id}
 ## 10. 다음 작업 순서
 
 ```text
-Frontend Phase B-2b
-전체 항목 목록을 Backend GET /items에 연결
+Frontend Phase B-2c
+Item 상세 화면을 GET /items/{item_id}에 연결
 ```
 
 **금지 유지:** 새 React 프로젝트, App 전면 재작성, Tailwind/색상 체계 교체, Mock 일괄 삭제.

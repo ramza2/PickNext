@@ -48,7 +48,9 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | --- | --- |
 | Home — Summary / Categories / 최근 등록 | **API** |
 | Home — 빠른 추천 / 최근 선택 이력 | Mock |
-| Items / Item Detail / Collections / History / Recommend / TMDB / Data / Settings | Mock |
+| Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
+| Item Detail | 미연동 (목록 클릭 시 Toast) |
+| Collections / History / Recommend / TMDB / Data / Settings | Mock |
 
 API 오류 시 Mock 숫자로 조용히 Fallback하지 않습니다. 해당 섹션에 오류·재시도를 표시합니다.
 
@@ -63,13 +65,15 @@ src/
 └─ app/
    ├─ App.tsx
    ├─ hooks/useHomeReadData.ts
+   ├─ hooks/useItemsReadData.ts
    ├─ mappers/home.ts
+   ├─ mappers/items.ts
    ├─ presentation/categoryPresentation.ts
    ├─ pageTypes.ts
    └─ layout/AppLayout.tsx
 ```
 
-다음: Phase B-2b — 전체 항목 목록 API 연동.
+다음: Phase B-2c — Item 상세 API 연동.
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 

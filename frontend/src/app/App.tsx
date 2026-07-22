@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import {
   Home, Search, Shuffle, List, Folder, Clock, Database, Settings,
@@ -31,10 +31,16 @@ import {
 } from "../mocks/data";
 import AppLayout from "./layout/AppLayout";
 import { useHomeReadData } from "./hooks/useHomeReadData";
+import { useItemsReadData } from "./hooks/useItemsReadData";
 import {
   mapApiCategoryToHomeCategory,
   mapApiItemToHomeRecentItem,
 } from "./mappers/home";
+import {
+  displayItemRating,
+  mapApiItemToItemsListViewModel,
+} from "./mappers/items";
+import { formatDate } from "../utils/date";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -53,10 +59,28 @@ const suggestCategory = (r: TMDBResult): string | null => {
 // ─── Shared Atoms ─────────────────────────────────────────────────────────────
 
 function StarRating({ rating, sm }: { rating?: number; sm?: boolean }) {
-  if (!rating) return <span className="text-xs text-muted-foreground">평가 없음</span>;
+  if (rating === undefined || rating === null || rating <= 0) {
+    return <span className="text-xs text-muted-foreground">평가 없음</span>;
+  }
   return (
     <span className="inline-flex items-center gap-0.5">
-      {[1,2,3,4,5].map(i => <Star key={i} size={sm?10:12} className={i<=rating?"fill-amber-400 text-amber-400":"text-gray-200"}/>)}
+      {[1,2,3,4,5].map(i => {
+        const filled = rating >= i;
+        const half = !filled && rating >= i - 0.5;
+        return (
+          <Star
+            key={i}
+            size={sm?10:12}
+            className={
+              filled
+                ? "fill-amber-400 text-amber-400"
+                : half
+                  ? "fill-amber-400/50 text-amber-400"
+                  : "text-gray-200"
+            }
+          />
+        );
+      })}
       <span className="ml-1 text-xs text-muted-foreground">{rating.toFixed(1)}</span>
     </span>
   );
@@ -1502,44 +1526,98 @@ function RecommendPage({ preselectedCats, showToast }: { preselectedCats: string
 
 // ─── Items Page ───────────────────────────────────────────────────────────────
 
-function ItemsPage({ navigateToItem, openAddItem }: { navigateToItem: (i: Item) => void; openAddItem: () => void }) {
-  const [query, setQuery]     = useState("");
-  const [catF, setCatF]       = useState("all");
-  const [statF, setStatF]     = useState("all");
-  const [sort, setSort]       = useState("updatedAt");
+function ItemsPage({ showToast, openAddItem }: {
+  showToast: (m: string) => void;
+  openAddItem: () => void;
+}) {
+  const {
+    categories,
+    items,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasNext,
+    hasPrevious,
+    searchInput,
+    appliedSearch,
+    categoryId,
+    status,
+    sort,
+    order,
+    isItemsLoading,
+    isCategoriesLoading,
+    itemsError,
+    categoriesError,
+    setSearchInput,
+    applySearchNow,
+    setCategoryId,
+    setStatus,
+    setSortPair,
+    setPage,
+    setPageSize,
+    resetFilters,
+    reloadItems,
+    reloadCategories,
+  } = useItemsReadData();
+
   const [tableView, setTableV] = useState(false);
-  const [page, setPage]       = useState(1);
-  const [perPage, setPerPage] = useState(25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const filtered = useMemo(() =>
-    ITEMS.filter(item =>
-      (catF==="all" || item.categoryId===catF) &&
-      (statF==="all" || item.status===statF) &&
-      (!query || item.title.toLowerCase().includes(query.toLowerCase()))
-    ).sort((a,b) => {
-      if (sort==="title")  return a.title.localeCompare(b.title,"ko");
-      if (sort==="rating") return (b.rating||0)-(a.rating||0);
-      return b.updatedAt.localeCompare(a.updatedAt);
-    }), [query,catF,statF,sort]);
+  const listItems = items.map(mapApiItemToItemsListViewModel);
+  const hasActiveFilters =
+    Boolean(appliedSearch) ||
+    categoryId !== null ||
+    status !== "ALL" ||
+    sort !== "updated_at" ||
+    order !== "desc";
 
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const paged = filtered.slice((page-1)*perPage, page*perPage);
+  const sortSelectValue =
+    sort === "title" && order === "asc"
+      ? "title"
+      : sort === "rating" && order === "desc"
+        ? "rating"
+        : "updatedAt";
+
+  const onSortChange = (value: string) => {
+    if (value === "title") setSortPair("title", "asc");
+    else if (value === "rating") setSortPair("rating", "desc");
+    else setSortPair("updated_at", "desc");
+  };
+
+  // Clear selection when the visible page of results changes.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page, pageSize, appliedSearch, categoryId, status, sort, order, items]);
 
   const toggleSelect = (id: string) =>
     setSelected(prev => { const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
   const toggleAll = () =>
-    setSelected(prev => prev.size===paged.length ? new Set() : new Set(paged.map(i=>i.id)));
+    setSelected(prev => prev.size===listItems.length ? new Set() : new Set(listItems.map(i=>i.id)));
 
-  const Card = ({ item }: { item: Item }) => {
-    const col = item.collectionId ? getCol(item.collectionId) : null;
+  const onItemActivate = () => {
+    showToast("항목 상세 연동은 다음 단계에서 제공됩니다.");
+  };
+
+  const onBulkAction = () => {
+    showToast("일괄 작업 API는 아직 연결되지 않았습니다.");
+  };
+
+  const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, total);
+
+  const Card = ({ item }: { item: ReturnType<typeof mapApiItemToItemsListViewModel> }) => {
+    const Icon = item.presentation.icon;
     return (
       <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer group"
-        onClick={() => navigateToItem(item)}>
+        onClick={onItemActivate}>
         <input type="checkbox" checked={selected.has(item.id)}
           onClick={e => { e.stopPropagation(); toggleSelect(item.id); }}
           className="w-3.5 h-3.5 flex-shrink-0 cursor-pointer accent-primary"/>
-        <Poster title={item.title} categoryId={item.categoryId} size="sm"/>
+        <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
+          style={{ backgroundColor: item.presentation.color }}>
+          {item.title.charAt(0)}
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="font-medium text-foreground text-sm leading-snug truncate group-hover:text-primary transition-colors">{item.title}</div>
@@ -1548,11 +1626,15 @@ function ItemsPage({ navigateToItem, openAddItem }: { navigateToItem: (i: Item) 
             </button>
           </div>
           <div className="flex flex-wrap gap-1 mt-1.5">
-            <CategoryBadge categoryId={item.categoryId} sm/><StatusBadge status={item.status} sm/>
+            <span className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
+              style={{ backgroundColor: item.presentation.bgColor, color: item.presentation.color }}>
+              <Icon size={10}/>{item.categoryName}
+            </span>
+            <StatusBadge status={item.status} sm/>
           </div>
-          {col && <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-0.5"><Layers size={9}/>{col.name}</div>}
+          {item.collectionName && <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-0.5"><Layers size={9}/>{item.collectionName}</div>}
           {item.progressNote && <div className="text-[10px] text-muted-foreground">{item.progressNote}</div>}
-          {item.rating && <div className="mt-1"><StarRating rating={item.rating} sm/></div>}
+          <div className="mt-1"><StarRating rating={displayItemRating(item.rating)} sm/></div>
         </div>
       </div>
     );
@@ -1568,13 +1650,13 @@ function ItemsPage({ navigateToItem, openAddItem }: { navigateToItem: (i: Item) 
         </button>
       </div>
 
-      {/* Bulk action bar */}
+      {/* Bulk action bar — visual only; write APIs not connected */}
       {selected.size > 0 && (
         <div className="bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
           <span className="text-sm font-medium text-primary">{selected.size}개 항목 선택됨</span>
           <div className="flex gap-2 ml-2">
             {["완료 처리","Category 이동","Collection 지정","삭제"].map(a => (
-              <button key={a}
+              <button key={a} onClick={onBulkAction}
                 className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${a==="삭제"?"border-red-200 text-red-600 hover:bg-red-50":"border-border text-foreground hover:bg-muted"}`}>
                 {a}
               </button>
@@ -1591,7 +1673,9 @@ function ItemsPage({ navigateToItem, openAddItem }: { navigateToItem: (i: Item) 
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
-            <input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }}
+            <input value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") applySearchNow(); }}
               placeholder="제목 검색"
               className="w-full pl-8 pr-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"/>
           </div>
@@ -1607,20 +1691,38 @@ function ItemsPage({ navigateToItem, openAddItem }: { navigateToItem: (i: Item) 
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <select value={catF} onChange={e=>{ setCatF(e.target.value); setPage(1); }}
-            className="text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/25">
-            <option value="all">전체 카테고리</option>
-            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select value={statF} onChange={e=>{ setStatF(e.target.value); setPage(1); }}
+          {categoriesError && !isCategoriesLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>카테고리를 불러오지 못했습니다.</span>
+              <button onClick={reloadCategories}
+                className="inline-flex items-center gap-1 text-xs bg-primary text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <RefreshCw size={11}/> 다시 시도
+              </button>
+            </div>
+          ) : (
+            <select
+              value={categoryId ?? "all"}
+              onChange={e => setCategoryId(e.target.value === "all" ? null : e.target.value)}
+              disabled={isCategoriesLoading}
+              className="text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/25">
+              <option value="all">전체 카테고리</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          <select
+            value={status === "ALL" ? "all" : status}
+            onChange={e => {
+              const v = e.target.value;
+              setStatus(v === "all" ? "ALL" : (v as "PLANNED" | "COMPLETED"));
+            }}
             className="text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/25">
             <option value="all">전체 상태</option><option value="PLANNED">예정</option><option value="COMPLETED">완료</option>
           </select>
-          <select value={sort} onChange={e=>setSort(e.target.value)}
+          <select value={sortSelectValue} onChange={e => onSortChange(e.target.value)}
             className="text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/25">
             <option value="updatedAt">최근 수정순</option><option value="title">제목순</option><option value="rating">평점 높은 순</option>
           </select>
-          <select value={perPage} onChange={e=>{ setPerPage(Number(e.target.value)); setPage(1); }}
+          <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
             className="text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/25">
             <option value={25}>25개씩</option><option value={50}>50개씩</option><option value={100}>100개씩</option>
           </select>
@@ -1628,97 +1730,171 @@ function ItemsPage({ navigateToItem, openAddItem }: { navigateToItem: (i: Item) 
       </div>
 
       <p className="text-xs text-muted-foreground mb-3">
-        {filtered.length.toLocaleString()}건 · {page}/{totalPages} 페이지
+        {isItemsLoading && items.length === 0
+          ? "불러오는 중…"
+          : `${total.toLocaleString("ko-KR")}건 · ${page}/${Math.max(totalPages, 1)} 페이지`}
       </p>
 
-      {/* Desktop table */}
-      {tableView && (
-        <div className="hidden sm:block bg-card border border-border rounded-2xl overflow-hidden mb-4">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-3 py-3 w-8">
-                  <input type="checkbox" onChange={toggleAll} checked={selected.size===paged.length&&paged.length>0} className="accent-primary"/>
-                </th>
-                {["","제목","카테고리","Collection","상태","평점","Progress Note","수정일",""].map((h,i) => (
-                  <th key={i} className="text-left px-3 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {paged.map((item,i) => {
-                const col = item.collectionId ? getCol(item.collectionId) : null;
-                return (
-                  <tr key={item.id} onClick={() => navigateToItem(item)}
-                    className={`border-b border-border hover:bg-muted/20 transition-colors cursor-pointer ${i%2===1?"bg-muted/5":""} ${selected.has(item.id)?"bg-blue-50/50":""}`}>
-                    <td className="px-3 py-3" onClick={e=>e.stopPropagation()}>
-                      <input type="checkbox" checked={selected.has(item.id)} onChange={()=>toggleSelect(item.id)} className="accent-primary"/>
-                    </td>
-                    <td className="px-3 py-3 w-12">
-                      <Poster title={item.title} categoryId={item.categoryId} size="sm"/>
-                    </td>
-                    <td className="px-3 py-3 font-medium text-foreground max-w-xs">
-                      <div className="truncate">{item.title}</div>
-                    </td>
-                    <td className="px-3 py-3"><CategoryBadge categoryId={item.categoryId} sm/></td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground">{col?.name || "—"}</td>
-                    <td className="px-3 py-3"><StatusBadge status={item.status} sm/></td>
-                    <td className="px-3 py-3"><StarRating rating={item.rating} sm/></td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground max-w-[120px] truncate">{item.progressNote||"—"}</td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{item.updatedAt}</td>
-                    <td className="px-3 py-3" onClick={e=>e.stopPropagation()}>
-                      <button className="text-muted-foreground hover:text-foreground"><MoreVertical size={14}/></button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {paged.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">결과가 없습니다.</div>}
+      {itemsError && !isItemsLoading ? (
+        <div className="bg-card border border-border rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <p className="text-sm text-muted-foreground">항목 목록을 불러오지 못했습니다.</p>
+          <button onClick={reloadItems}
+            className="inline-flex items-center justify-center gap-1.5 text-xs bg-primary text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition-colors font-medium self-start sm:self-auto">
+            <RefreshCw size={12}/> 다시 시도
+          </button>
         </div>
+      ) : isItemsLoading && items.length === 0 ? (
+        <>
+          {tableView && (
+            <div className="hidden sm:block bg-card border border-border rounded-2xl overflow-hidden mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="px-3 py-3 w-8"/>
+                    {["","제목","카테고리","Collection","상태","평점","Progress Note","수정일",""].map((h,i) => (
+                      <th key={i} className="text-left px-3 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i} className="border-b border-border">
+                      <td className="px-3 py-3" colSpan={10}>
+                        <div className="h-10 animate-pulse rounded bg-muted"/>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className={tableView?"sm:hidden space-y-2":"space-y-2"}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
+                <div className="w-3.5 h-3.5 rounded animate-pulse bg-muted flex-shrink-0"/>
+                <div className="w-10 h-14 rounded-lg animate-pulse bg-muted flex-shrink-0"/>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-2/3 animate-pulse rounded bg-muted"/>
+                  <div className="h-3 w-1/3 animate-pulse rounded bg-muted"/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : listItems.length === 0 ? (
+        <div className="bg-card border border-border rounded-2xl text-center py-16">
+          <Search size={28} className="text-muted-foreground mx-auto mb-3"/>
+          <p className="font-medium text-foreground">
+            {hasActiveFilters ? "조건에 맞는 항목이 없습니다." : "등록된 항목이 없습니다."}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {hasActiveFilters ? "다른 검색어 또는 필터를 시도해 보세요" : "신규 항목을 추가해 보세요"}
+          </p>
+          {hasActiveFilters && (
+            <button onClick={resetFilters}
+              className="mt-4 inline-flex items-center gap-1.5 text-xs bg-primary text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+              필터 초기화
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Desktop table */}
+          {tableView && (
+            <div className="hidden sm:block bg-card border border-border rounded-2xl overflow-hidden mb-4 relative">
+              {isItemsLoading && (
+                <div className="absolute inset-0 bg-card/40 pointer-events-none z-10"/>
+              )}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="px-3 py-3 w-8">
+                      <input type="checkbox" onChange={toggleAll} checked={selected.size===listItems.length&&listItems.length>0} className="accent-primary"/>
+                    </th>
+                    {["","제목","카테고리","Collection","상태","평점","Progress Note","수정일",""].map((h,i) => (
+                      <th key={i} className="text-left px-3 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {listItems.map((item,i) => {
+                    const Icon = item.presentation.icon;
+                    return (
+                      <tr key={item.id} onClick={onItemActivate}
+                        className={`border-b border-border hover:bg-muted/20 transition-colors cursor-pointer ${i%2===1?"bg-muted/5":""} ${selected.has(item.id)?"bg-blue-50/50":""}`}>
+                        <td className="px-3 py-3" onClick={e=>e.stopPropagation()}>
+                          <input type="checkbox" checked={selected.has(item.id)} onChange={()=>toggleSelect(item.id)} className="accent-primary"/>
+                        </td>
+                        <td className="px-3 py-3 w-12">
+                          <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
+                            style={{ backgroundColor: item.presentation.color }}>
+                            {item.title.charAt(0)}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 font-medium text-foreground max-w-xs">
+                          <div className="truncate">{item.title}</div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
+                            style={{ backgroundColor: item.presentation.bgColor, color: item.presentation.color }}>
+                            <Icon size={10}/>{item.categoryName}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">{item.collectionName || "—"}</td>
+                        <td className="px-3 py-3"><StatusBadge status={item.status} sm/></td>
+                        <td className="px-3 py-3"><StarRating rating={displayItemRating(item.rating)} sm/></td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground max-w-[120px] truncate">{item.progressNote||"—"}</td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDate(item.updatedAt) || "—"}</td>
+                        <td className="px-3 py-3" onClick={e=>e.stopPropagation()}>
+                          <button className="text-muted-foreground hover:text-foreground"><MoreVertical size={14}/></button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Card list */}
+          <div className={`relative ${tableView?"sm:hidden space-y-2":"space-y-2"}`}>
+            {isItemsLoading && (
+              <div className="absolute inset-0 bg-background/30 pointer-events-none z-10 rounded-2xl"/>
+            )}
+            {listItems.map(item => <Card key={item.id} item={item}/>)}
+          </div>
+        </>
       )}
 
-      {/* Card list */}
-      <div className={tableView?"sm:hidden space-y-2":"space-y-2"}>
-        {paged.map(item => <Card key={item.id} item={item}/>)}
-        {paged.length === 0 && (
-          <div className="bg-card border border-border rounded-2xl text-center py-16">
-            <Search size={28} className="text-muted-foreground mx-auto mb-3"/>
-            <p className="font-medium text-foreground">검색 결과가 없습니다</p>
-            <p className="text-sm text-muted-foreground mt-1">다른 검색어 또는 필터를 시도해 보세요</p>
-          </div>
-        )}
-      </div>
-
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!itemsError && totalPages > 1 && (
         <div className="flex items-center justify-between mt-5">
           <p className="text-xs text-muted-foreground">
-            {(page-1)*perPage+1}–{Math.min(page*perPage,filtered.length)} / {filtered.length.toLocaleString()}건
+            {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}건
           </p>
           <div className="flex items-center gap-1">
-            <button onClick={() => setPage(1)} disabled={page===1}
+            <button onClick={() => setPage(1)} disabled={!hasPrevious}
               className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
               <ChevronsLeft size={14}/>
             </button>
-            <button onClick={() => setPage(p=>Math.max(1,p-1))} disabled={page===1}
+            <button onClick={() => setPage(page - 1)} disabled={!hasPrevious}
               className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
               <ChevronLeft size={14}/>
             </button>
             {Array.from({length:Math.min(5,totalPages)},(_,i) => {
               const p = Math.min(Math.max(page-2,1)+i, totalPages);
               return (
-                <button key={p} onClick={() => setPage(p)}
+                <button key={`${p}-${i}`} onClick={() => setPage(p)}
                   className={`w-7 h-7 rounded-lg text-xs font-medium border transition-colors ${page===p?"border-primary bg-primary text-white":"border-border text-foreground hover:bg-muted"}`}>
                   {p}
                 </button>
               );
             })}
-            <button onClick={() => setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+            <button onClick={() => setPage(page + 1)} disabled={!hasNext}
               className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
               <ChevronRight size={14}/>
             </button>
-            <button onClick={() => setPage(totalPages)} disabled={page===totalPages}
+            <button onClick={() => setPage(totalPages)} disabled={!hasNext}
               className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
               <ChevronsRight size={14}/>
             </button>
@@ -2207,7 +2383,7 @@ export default function App() {
       case "home":           return <HomePage setPage={setPage} navigateToRecommend={navigateToRecommend} openAddItem={openAddItem}/>;
       case "search":         return <SearchPage showToast={showToast}/>;
       case "recommend":      return <RecommendPage key={recommendCats.join(",")} preselectedCats={recommendCats} showToast={showToast}/>;
-      case "items":          return <ItemsPage navigateToItem={navigateToItem} openAddItem={openAddItem}/>;
+      case "items":          return <ItemsPage showToast={showToast} openAddItem={openAddItem}/>;
       case "collections":    return <CollectionsPage showToast={showToast}/>;
       case "history":        return <HistoryPage navigateToHistory={navigateToHistory}/>;
       case "data":           return <DataPage/>;
