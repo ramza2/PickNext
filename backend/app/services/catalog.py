@@ -5,8 +5,9 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -23,6 +24,9 @@ from app.models import (
     RecommendationHistoryItem,
     User,
 )
+
+if TYPE_CHECKING:
+    from app.schemas import ItemCreate, ItemUpdate
 
 
 class ItemSort(str, Enum):
@@ -226,6 +230,240 @@ def get_item_detail(db: Session, user: User, item_id: UUID) -> dict[str, Any]:
     payload = _item_list_dict(item)
     payload["memo"] = item.memo
     return payload
+
+
+def _get_owned_category(db: Session, user_id: UUID, category_id: UUID) -> Category | None:
+    return db.scalar(
+        select(Category).where(
+            Category.id == category_id,
+            Category.user_id == user_id,
+        )
+    )
+
+
+def _lock_owned_collection(db: Session, user_id: UUID, collection_id: UUID) -> Collection | None:
+    return db.scalar(
+        select(Collection)
+        .where(
+            Collection.id == collection_id,
+            Collection.user_id == user_id,
+        )
+        .with_for_update()
+    )
+
+
+def _lock_owned_collections_ordered(
+    db: Session,
+    user_id: UUID,
+    collection_ids: set[UUID],
+) -> None:
+    for collection_id in sorted(collection_ids, key=str):
+        if _lock_owned_collection(db, user_id, collection_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Collection not found",
+            )
+
+
+def _ensure_item_collection_integrity(db: Session, user_id: UUID, collection_id: UUID) -> None:
+    collection = db.get(Collection, collection_id)
+    if collection is None or collection.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Data integrity error",
+        )
+
+
+def _fetch_item_detail_row(db: Session, user_id: UUID, item_id: UUID) -> Item:
+    item = db.scalar(
+        select(Item)
+        .options(
+            joinedload(Item.category),
+            joinedload(Item.collection),
+        )
+        .where(
+            Item.id == item_id,
+            Item.user_id == user_id,
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+    return item
+
+
+def _item_detail_dict(item: Item) -> dict[str, Any]:
+    payload = _item_list_dict(item)
+    payload["memo"] = item.memo
+    return payload
+
+
+def _item_field_values_equal(field: str, current: Any, new: Any) -> bool:
+    if field == "rating":
+        return Decimal(str(current)) == Decimal(str(new))
+    return current == new
+
+
+def _is_known_item_write_integrity_error(exc: IntegrityError) -> bool:
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        constraint = getattr(orig, "constraint_name", None)
+        if constraint in {
+            "items_category_id_fkey",
+            "items_collection_id_fkey",
+        }:
+            return True
+        diag = getattr(orig, "diag", None)
+        if diag is not None:
+            diag_constraint = getattr(diag, "constraint_name", None)
+            if diag_constraint in {
+                "items_category_id_fkey",
+                "items_collection_id_fkey",
+            }:
+                return True
+    message = str(exc)
+    return "items_category_id_fkey" in message or "items_collection_id_fkey" in message
+
+
+def create_item(
+    db: Session,
+    user: User,
+    payload: ItemCreate,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Create an item for the user."""
+    if _get_owned_category(db, user.id, payload.category_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
+
+    if payload.collection_id is not None:
+        _lock_owned_collections_ordered(db, user.id, {payload.collection_id})
+
+    item = Item(
+        user_id=user.id,
+        category_id=payload.category_id,
+        collection_id=payload.collection_id,
+        title=payload.title,
+        status=payload.status,
+        rating=payload.rating,
+        progress_note=payload.progress_note,
+        memo=payload.memo,
+    )
+    try:
+        db.add(item)
+        db.flush()
+        response = _item_detail_dict(_fetch_item_detail_row(db, user.id, item.id))
+        if commit:
+            db.commit()
+        return response
+    except HTTPException:
+        if commit:
+            db.rollback()
+        raise
+    except IntegrityError as exc:
+        if commit:
+            db.rollback()
+        if _is_known_item_write_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Related resource changed",
+            ) from exc
+        raise
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
+def update_item(
+    db: Session,
+    user: User,
+    item_id: UUID,
+    payload: ItemUpdate,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Partially update an item owned by the user."""
+    item = db.scalar(
+        select(Item).where(Item.id == item_id, Item.user_id == user.id).with_for_update()
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+
+    if item.collection_id is not None:
+        _ensure_item_collection_integrity(db, user.id, item.collection_id)
+
+    fields = payload.model_fields_set
+    new_values: dict[str, Any] = {}
+
+    if "title" in fields:
+        new_values["title"] = payload.title
+    if "category_id" in fields:
+        if _get_owned_category(db, user.id, payload.category_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found",
+            )
+        new_values["category_id"] = payload.category_id
+    if "status" in fields:
+        new_values["status"] = payload.status
+    if "rating" in fields:
+        new_values["rating"] = payload.rating
+    if "progress_note" in fields:
+        new_values["progress_note"] = payload.progress_note
+    if "memo" in fields:
+        new_values["memo"] = payload.memo
+    if "collection_id" in fields:
+        new_collection_id = payload.collection_id
+        old_collection_id = item.collection_id
+        if new_collection_id != old_collection_id:
+            lock_ids = {
+                collection_id
+                for collection_id in (old_collection_id, new_collection_id)
+                if collection_id is not None
+            }
+            if lock_ids:
+                _lock_owned_collections_ordered(db, user.id, lock_ids)
+        new_values["collection_id"] = new_collection_id
+
+    changed = any(
+        not _item_field_values_equal(field, getattr(item, field), value)
+        for field, value in new_values.items()
+    )
+
+    if not changed:
+        if commit:
+            db.commit()
+        return _item_detail_dict(_fetch_item_detail_row(db, user.id, item.id))
+
+    for field, value in new_values.items():
+        setattr(item, field, value)
+
+    try:
+        db.flush()
+        response = _item_detail_dict(_fetch_item_detail_row(db, user.id, item.id))
+        if commit:
+            db.commit()
+        return response
+    except HTTPException:
+        if commit:
+            db.rollback()
+        raise
+    except IntegrityError as exc:
+        if commit:
+            db.rollback()
+        if _is_known_item_write_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Related resource changed",
+            ) from exc
+        raise
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
 
 
 def delete_item(

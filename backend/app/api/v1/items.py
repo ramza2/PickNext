@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models import ItemStatus, User
-from app.schemas import ItemDetailResponse, ItemListResponse, ItemSort, SortOrder
+from app.schemas import (
+    ItemCreate,
+    ItemDetailResponse,
+    ItemListResponse,
+    ItemSort,
+    ItemUpdate,
+    SortOrder,
+)
 from app.services import catalog
 from app.services.catalog import ItemListParams
 
@@ -52,6 +59,42 @@ def read_item_detail(
     user: User = Depends(get_current_user),
 ) -> ItemDetailResponse:
     return ItemDetailResponse(**catalog.get_item_detail(db, user, item_id))
+
+
+@router.post(
+    "/items",
+    response_model=ItemDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        404: {"description": "Category or collection not found"},
+        409: {"description": "Related resource changed"},
+        422: {"description": "Validation Error"},
+    },
+)
+def create_item(
+    payload: ItemCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ItemDetailResponse:
+    return ItemDetailResponse(**catalog.create_item(db, user, payload))
+
+
+@router.patch(
+    "/items/{item_id}",
+    response_model=ItemDetailResponse,
+    responses={
+        404: {"description": "Item or related resource not found"},
+        409: {"description": "Related resource changed"},
+        422: {"description": "Validation Error"},
+    },
+)
+def update_item(
+    item_id: UUID,
+    payload: ItemUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ItemDetailResponse:
+    return ItemDetailResponse(**catalog.update_item(db, user, item_id, payload))
 
 
 @router.delete(

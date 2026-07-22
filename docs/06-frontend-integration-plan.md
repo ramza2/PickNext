@@ -2,7 +2,7 @@
 
 > **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · C-1 Collection POST/PATCH Backend 완료 · **C-2 Collection 생성·수정 Frontend 연동 완료 (2026-07-22)**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (잔여):** Item Frontend 생성·수정, Item POST/PATCH, History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (잔여):** Item Frontend 생성·수정, History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -237,8 +237,18 @@ frontend/
 ### 다음 권장
 
 ```text
-Item POST/PATCH Backend·Frontend (생성·수정·상태·연결 해제)
+Item Frontend 생성·수정 연동 (POST/PATCH Backend I-1 완료)
 ```
+
+### Phase I-1 — Item POST/PATCH Backend ✅ 완료 (2026-07-22)
+
+- `POST /api/v1/items` — 201 + `ItemDetailResponse` (필수: `title`, `category_id`)
+- `PATCH /api/v1/items/{item_id}` — 200 + `ItemDetailResponse`, Partial Body·명시 null 구분·no-op·Collection Lock
+- PATCH 연결 해제·이동 시 빈 Collection 유지, Collection `updated_at` Touch 없음
+- 추천 이력 Snapshot 불변, Legacy Mapping 유지(신규 POST는 Mapping 없음)
+- `tests/test_item_write_api.py` · 격리 DB Smoke `picknext_item_write_smoke` 16/16
+- Backend pytest **195 passed** (기존 159 + 신규 36)
+- **잔여:** Item Frontend 생성·수정 Dialog·상태 버튼·Collection Item 「제거」 연동
 
 ### Phase C-1 — Collection POST/PATCH Backend ✅ 완료 (2026-07-22)
 
@@ -300,7 +310,8 @@ DELETE /api/v1/collections/{collection_id}
 | Collection 생성·수정 UI | ✅ C-2 |
 | History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
-| Item POST/PATCH·Frontend Item 생성·수정 | 미완료 |
+| Item POST/PATCH Backend | **I-1 완료** |
+| Item POST/PATCH·Frontend Item 생성·수정 | Frontend 미연동 |
 
 ## 9. 위험 요소
 

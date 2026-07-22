@@ -2,7 +2,14 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from app.models import CategoryType, ItemStatus, StatusFilter
 from app.services.catalog import CollectionSort, ItemSort, SortOrder
@@ -42,6 +49,57 @@ def _normalize_collection_name(value: object) -> str:
     return normalized
 
 
+def _normalize_item_title(value: object) -> str:
+    if value is None:
+        raise ValueError("title must not be empty")
+    if not isinstance(value, str):
+        raise TypeError("title must be a string")
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("title must not be empty")
+    return normalized
+
+
+def _normalize_item_rating(value: object) -> Decimal:
+    if isinstance(value, bool):
+        raise TypeError("rating must be a number")
+    try:
+        rating = Decimal(str(value))
+    except Exception as exc:
+        raise ValueError("rating must be a number") from exc
+    if not rating.is_finite():
+        raise ValueError("rating must be a finite number")
+    if rating < Decimal("0") or rating > Decimal("5"):
+        raise ValueError("rating must be between 0.0 and 5.0")
+    if (rating * 2) != (rating * 2).to_integral_value():
+        raise ValueError("rating must be in 0.5 increments")
+    return rating
+
+
+def _normalize_optional_progress_note(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError("progress_note must be a string")
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if len(normalized) > 200:
+        raise ValueError("progress_note must be at most 200 characters")
+    return normalized
+
+
+def _normalize_optional_memo(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError("memo must be a string")
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
 class CollectionCreate(BaseModel):
     name: str
 
@@ -61,21 +119,96 @@ class CollectionUpdate(BaseModel):
 
 
 class ItemCreate(BaseModel):
+    title: str
     category_id: UUID
-    title: str = Field(min_length=1)
-    status: ItemStatus
-    rating: Decimal = Field(ge=Decimal("0"), le=Decimal("5"))
     collection_id: UUID | None = None
-    progress_note: str | None = Field(default=None, max_length=200)
+    status: ItemStatus = ItemStatus.PLANNED
+    rating: Decimal = Decimal("0.0")
+    progress_note: str | None = None
     memo: str | None = None
 
-    @field_validator("rating")
+    @field_validator("title", mode="before")
     @classmethod
-    def rating_half_step(cls, value: Decimal) -> Decimal:
-        rating = Decimal(str(value))
-        if (rating * 2) != (rating * 2).to_integral_value():
-            raise ValueError("rating must be in 0.5 increments")
-        return rating
+    def normalize_title(cls, value: object) -> str:
+        return _normalize_item_title(value)
+
+    @field_validator("rating", mode="before")
+    @classmethod
+    def normalize_rating(cls, value: object) -> Decimal:
+        if value is None:
+            raise ValueError("rating must not be null")
+        return _normalize_item_rating(value)
+
+    @field_validator("progress_note", mode="before")
+    @classmethod
+    def normalize_progress_note(cls, value: object) -> str | None:
+        return _normalize_optional_progress_note(value)
+
+    @field_validator("memo", mode="before")
+    @classmethod
+    def normalize_memo(cls, value: object) -> str | None:
+        return _normalize_optional_memo(value)
+
+
+class ItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    category_id: UUID | None = None
+    collection_id: UUID | None = None
+    status: ItemStatus | None = None
+    rating: Decimal | None = None
+    progress_note: str | None = None
+    memo: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_empty_body(cls, data: object) -> object:
+        if isinstance(data, dict) and not data:
+            raise ValueError("at least one field must be provided")
+        return data
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _normalize_item_title(value)
+
+    @field_validator("rating", mode="before")
+    @classmethod
+    def normalize_rating(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _normalize_item_rating(value)
+
+    @field_validator("progress_note", mode="before")
+    @classmethod
+    def normalize_progress_note(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _normalize_optional_progress_note(value)
+
+    @field_validator("memo", mode="before")
+    @classmethod
+    def normalize_memo(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _normalize_optional_memo(value)
+
+    @model_validator(mode="after")
+    def validate_explicit_nulls(self) -> "ItemUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field must be provided")
+        if "title" in self.model_fields_set and self.title is None:
+            raise ValueError("title must not be null")
+        if "category_id" in self.model_fields_set and self.category_id is None:
+            raise ValueError("category_id must not be null")
+        if "status" in self.model_fields_set and self.status is None:
+            raise ValueError("status must not be null")
+        if "rating" in self.model_fields_set and self.rating is None:
+            raise ValueError("rating must not be null")
+        return self
 
 
 class RecommendationHistoryCreate(BaseModel):
@@ -199,6 +332,7 @@ __all__ = [
     "ItemListItem",
     "ItemListResponse",
     "ItemSort",
+    "ItemUpdate",
     "ORMModel",
     "RecommendationHistoryCreate",
     "RecommendationHistoryItemCreate",

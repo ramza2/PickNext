@@ -713,8 +713,9 @@ components:
 | TMDB 필드 | **A-1 미포함** | 컬럼 없음 | Placeholder 유지 | 스키마 단순 | 0005 후 |
 | color/icon | API 미제공 | DB 없음 | 로컬 맵 | 없음 | 낮음 |
 | N+1 | joinedload | 목록 성능 | 없음 | catalog.list_items | 낮음 |
-| Item DELETE | **`DELETE /api/v1/items/{id}` 204** | Hard Delete D-3~D-5 | **D-7 FE 연동** | catalog.delete_item | POST·PATCH |
-| Collection DELETE | **`DELETE /api/v1/collections/{id}` 204/409** | Hard Delete D-6 | **D-7 FE 연동** | catalog.delete_collection | POST·PATCH |
+| Item DELETE | **`DELETE /api/v1/items/{id}` 204** | Hard Delete D-3~D-5 | **D-7 FE 연동** | catalog.delete_item | — |
+| Item POST/PATCH | **`POST`/`PATCH /api/v1/items`** | I-1 Backend | Frontend 미연동 | catalog.create_item / update_item | FE Form |
+| Collection DELETE | **`DELETE /api/v1/collections/{id}` 204/409** | Hard Delete D-6 | **D-7 FE 연동** | catalog.delete_collection | — |
 
 ---
 
