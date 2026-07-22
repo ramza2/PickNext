@@ -47,6 +47,25 @@
 | memo | 감상평·일반 메모 |
 | deleted_at | 소프트 삭제 |
 
+#### TMDB 연동 확장 (구현 전, Migration `0004` 예정)
+
+Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NULL`을 유지한다. 자동 TMDB 매칭은 하지 않는다.
+
+| 컬럼 | 설명 |
+| --- | --- |
+| external_source | `TMDB` 또는 NULL |
+| external_id | TMDB ID |
+| external_media_type | `MOVIE` / `TV` / NULL |
+| poster_path | TMDB `poster_path` (상대 경로) |
+| overview | 줄거리 |
+| release_date | 개봉일 또는 첫 방영일 |
+| original_title | 원제 |
+| external_rating | TMDB 평점 (`items.rating`과 별도, 선택) |
+
+중복 정책: 활성 Item에 대해 `(user_id, external_source, external_media_type, external_id)` unique (부분 인덱스).
+
+상세: [05-tmdb-integration-plan.md](./05-tmdb-integration-plan.md)
+
 ### recommendation_history
 
 사용자가 `이걸로 선택`한 결과만 저장한다.

@@ -29,3 +29,10 @@ PickNext는 사용자가 관심 있는 항목을 카테고리별로 기록하고
 - CRUD·추천 API
 - Legacy import 실행
 - Traefik / 운영 배포
+
+## 향후 범위 (기획 반영)
+
+- TMDB 기반 영화·TV 검색 및 `PLANNED` Item 등록 — [05-tmdb-integration-plan.md](./05-tmdb-integration-plan.md)
+- Item·Category·Collection CRUD API
+- 랜덤 추천 및 추천 이력 API
+- Frontend / PWA

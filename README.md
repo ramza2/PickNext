@@ -271,13 +271,23 @@ pytest -q
 - 인증·로그인
 - Category/Item CRUD API
 - 랜덤 추천·선택·이력 API
-- TMDB / 이미지 / Traefik / 서버 배포
+- TMDB API 실제 연동 (기획 문서만 반영)
+- Traefik / 서버 배포
 
 ## 다음 개발 단계
 
-1. Category·Item CRUD API
-2. 랜덤 추천 및 `이걸로 선택` 이력 API
-3. React + TypeScript + Vite Frontend
-4. Traefik 및 운영 배포 설정
+1. TMDB 검색·등록 Backend (`docs/05-tmdb-integration-plan.md`)
+2. Category·Item CRUD API
+3. 랜덤 추천 및 `이걸로 선택` 이력 API
+4. React + TypeScript + Vite Frontend (TMDB 검색·등록 UI 포함)
+5. Traefik 및 운영 배포 설정
 
 설계 문서는 `docs/`를 참고하세요.
+
+| 문서 | 내용 |
+| --- | --- |
+| `docs/01-product-scope.md` | 서비스 범위 |
+| `docs/02-domain-model.md` | 도메인 모델 |
+| `docs/03-recommendation-rules.md` | 추천 규칙 |
+| `docs/04-legacy-migration.md` | Legacy Import·보정 |
+| `docs/05-tmdb-integration-plan.md` | TMDB 검색·등록 기획 |
