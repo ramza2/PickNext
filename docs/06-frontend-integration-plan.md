@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · C-1/C-2 Collection 쓰기 완료 · I-1 Item POST/PATCH Backend 완료 · **I-2 Item 생성·수정 Frontend 연동 완료 (2026-07-23)**
+> **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · C-1/C-2 Collection 쓰기 완료 · I-1/I-2 Item 쓰기 완료 · **I-3 Collection 상세 Item 빠른 작업·쓰기 최종 회귀 완료 (2026-07-23)**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (잔여):** Collection 상세 Item 「제거」 빠른 연결 해제, History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (잔여):** Bulk Delete, Drag & Drop, History/추천/TMDB, 인증, React Router, App.tsx Page 분리, 자동화 Browser E2E
 
 ## 1. 실행·빌드 확인 결과
 
@@ -229,15 +229,27 @@ frontend/
 - Item 상세·Collection 상세 기존 삭제 버튼 → Confirm Dialog
 - Item: 추천 이력·마지막 Collection 자동 삭제 안내
 - Collection: `item_count > 0` 사전 Toast 차단, Backend 409 후 재조회
-- Collection 상세 Item 행 「제거」: 연결 해제 미구현 Toast 유지 (Hard Delete 미연결)
+- Collection 상세 Item 행 「제거」: I-3에서 연결 해제 연동 (아래 Phase I-3)
 - origin(home/items/collections)별 복귀, Snapshot·페이지 보존, 마지막 페이지 보정
 - `scripts/verify-delete-api.mjs` (Fetch Mock)
 - D-8: Backend 격리 DB Smoke 28/28, Seed 비파괴, build/tsc 통과
 
+### Phase I-3 — Collection 상세 Item 빠른 작업 · 쓰기 최종 회귀 ✅ 완료 (2026-07-23)
+
+- Collection 상세 「제거」 → ConfirmDialog → `updateItem(id, { collection_id: null })` (비낙관적)
+- Item 유지 · 빈 Collection 유지 · `deleteItem`/`deleteCollection` 미호출
+- 기존 행 상태 버튼 → `updateItem({ status })` PLANNED↔COMPLETED
+- 행 단위 Pending · Form/Delete와 Quick Action 충돌 방지 · 페이지 보정 재사용
+- `scripts/verify-collection-item-quick-actions.mjs` · item/collection/delete verify · tsc · build
+- Backend 전체 **196 passed** · 격리 DB `picknext_i3_write_regression` Smoke **33/33**
+- Seed 비파괴: 7202 / 249 / 10 / PLANNED 4708 / COMPLETED 2494 / linked 845
+- **잔여:** Bulk · DnD · Category CRUD · History UI · TMDB · 인증 · 자동화 Browser E2E
+- **판정 메모:** Desktop/Mobile 실브라우저 시각·Console·Network는 수동 확인 권장 (PASS WITH NOTES)
+
 ### 다음 권장
 
 ```text
-I-3 Collection 상세 Item 「제거」 빠른 연결 해제 (PATCH collection_id=null)
+Bulk Delete / Drag & Drop / Category CRUD / RecommendationHistory UI / TMDB / 인증 (별도)
 ```
 
 ### Phase I-2 — Item 생성·수정 Frontend ✅ 완료 (2026-07-23)
@@ -247,9 +259,8 @@ I-3 Collection 상세 Item 「제거」 빠른 연결 해제 (PATCH collection_i
 - 생성 Context: Home / Items(필터 Category 사전선택) / Collection 상세(Collection 고정)
 - 생성 성공 → Item 상세 진입 + origin 보존 / 수정 성공 → 상세 유지 + origin 보존
 - PATCH Diff(변경 필드만) · 명시적 null · 변경 없음 시 요청 생략
-- Item 상세 상태 버튼 PATCH 연동 · Collection 「제거」는 미지원 Toast 유지
+- Item 상세 상태 버튼 PATCH 연동 · Collection 「제거」는 I-3에서 연동
 - `scripts/verify-item-write-api.mjs` · `verify-item-write-flow.mjs` · tsc · build 통과
-- **잔여:** Collection 상세 빠른 연결 해제(I-3)
 
 ### Phase I-1 — Item POST/PATCH Backend ✅ 완료 (2026-07-22)
 
@@ -323,7 +334,7 @@ DELETE /api/v1/collections/{collection_id}
 | React Router / Page 분리 | 미완료 |
 | Item POST/PATCH Backend | **I-1 완료** |
 | Item POST/PATCH Frontend | **I-2 완료** |
-| Collection 상세 Item 「제거」 | 미구현 (I-3) |
+| Collection 상세 Item 「제거」·빠른 상태 | **I-3 완료** (연결 해제·상태 PATCH) |
 
 ## 9. 위험 요소
 

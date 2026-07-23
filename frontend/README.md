@@ -51,7 +51,7 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
 | Item Detail | **API** (`GET /items/{id}`) · **생성·수정(I-2)** · **삭제(D-7)** · 상태 버튼 PATCH · Poster Placeholder |
 | Collections 목록 | **API** (검색·페이지) · **생성(C-2)** |
-| Collection 인라인 상세 / 소속 Item | **API** · **이름 수정(C-2)** · **삭제(D-7)** · Item 추가(I-2) · Item 행 「제거」= 연결 해제 미구현 |
+| Collection 인라인 상세 / 소속 Item | **API** · **이름 수정(C-2)** · **삭제(D-7)** · Item 추가(I-2) · Item 행 「제거」= 연결 해제(I-3) · 빠른 상태(I-3) |
 | History / Recommend / TMDB / Data / Settings | Mock |
 
 API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
@@ -76,6 +76,7 @@ src/
 ├─ scripts/verify-collection-write-api.mjs
 ├─ scripts/verify-item-write-api.mjs
 ├─ scripts/verify-item-write-flow.mjs
+├─ scripts/verify-collection-item-quick-actions.mjs
 └─ app/
    ├─ App.tsx
    ├─ hooks/useHomeReadData.ts
@@ -93,13 +94,27 @@ src/
    └─ layout/AppLayout.tsx
 ```
 
-다음: Collection 상세 Item 「제거」 빠른 연결 해제 (I-3).
+다음: Bulk Delete / Drag & Drop / Category CRUD / History UI / TMDB / 인증 (별도).
+
+현재 쓰기 상태:
+
+```text
+Collection CRUD 완료
+Item CRUD 완료
+Item 상태 변경 완료
+Item Form Collection 연결·이동·해제 완료
+Collection 상세 빠른 Item 연결 해제 완료
+Collection 상세 빠른 상태 변경 완료
+```
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 
 ## 검증
 
 ```bash
+node scripts/verify-collection-item-quick-actions.mjs
+node scripts/verify-item-write-api.mjs
+node scripts/verify-item-write-flow.mjs
 node scripts/verify-collection-write-api.mjs
 node scripts/verify-delete-api.mjs
 npx tsc --noEmit

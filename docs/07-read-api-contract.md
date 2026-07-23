@@ -714,7 +714,7 @@ components:
 | color/icon | API 미제공 | DB 없음 | 로컬 맵 | 없음 | 낮음 |
 | N+1 | joinedload | 목록 성능 | 없음 | catalog.list_items | 낮음 |
 | Item DELETE | **`DELETE /api/v1/items/{id}` 204** | Hard Delete D-3~D-5 | **D-7 FE 연동** | catalog.delete_item | — |
-| Item POST/PATCH | **`POST`/`PATCH /api/v1/items`** | I-1 Backend · **I-2 FE** | 연동 완료 | catalog.create_item / update_item | Collection 「제거」 |
+| Item POST/PATCH | **`POST`/`PATCH /api/v1/items`** | I-1 Backend · **I-2/I-3 FE** | 연동 완료 | catalog.create_item / update_item | — |
 | Collection DELETE | **`DELETE /api/v1/collections/{id}` 204/409** | Hard Delete D-6 | **D-7 FE 연동** | catalog.delete_collection | — |
 
 ---

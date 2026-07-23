@@ -103,5 +103,6 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 - Frontend DELETE Dialog·origin 복귀 연동 완료 (D-7), D-8 회귀·Smoke 검증 완료
 - `POST /api/v1/collections` · `PATCH /api/v1/collections/{collection_id}` Backend 구현 완료 (C-1): 이름 Trim·최대 200자·동일 사용자 이름 Unique·빈 Collection 생성 허용·PATCH no-op 시 `updated_at` 불변
 - `POST /api/v1/items` · `PATCH /api/v1/items/{item_id}` Backend 구현 완료 (I-1): `title` TEXT·앞뒤 Trim·중복 제목 허용·`rating` 0~5·0.5 단위·`collection_id` 연결·이동·해제(PATCH 시 빈 Collection 유지)·Category 변경 시 Collection 연결 유지
+- Collection 상세 Item 「제거」(I-3): `PATCH /items/{id}` `{ collection_id: null }` — **Item 자체는 유지**, 마지막 Item이어도 **빈 Collection 유지**. Item 영구 삭제는 Item 상세 `DELETE`만 수행한다.
 - RecommendationHistoryItem → Item은 `RESTRICT`
 - RecommendationHistoryItem → RecommendationHistory는 `CASCADE`

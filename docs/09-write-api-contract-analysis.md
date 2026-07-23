@@ -1,6 +1,6 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Collection·Item 기본 쓰기 Backend·Frontend 구현 완료 (C-1/C-2 · I-1/I-2) · 삭제 D-7/D-8 완료
+**상태:** Collection·Item 기본 쓰기 Backend·Frontend 및 최종 회귀 완료 (C-1/C-2 · I-1/I-2/I-3 · D-7/D-8)
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
@@ -11,8 +11,9 @@
 **C-2 구현:** 2026-07-22 — Frontend Collection 생성·수정 Dialog·API Client·409 Inline
 **I-1 구현:** 2026-07-22 — `POST`/`PATCH /api/v1/items` (Validation·Lock·no-op·History Snapshot 불변)
 **I-2 구현:** 2026-07-23 — Frontend Item 생성·수정 Dialog·상태 버튼·PATCH Diff·origin 보존
+**I-3 구현:** 2026-07-23 — Collection 상세 Item 빠른 연결 해제·상태 변경 · 쓰기 최종 회귀
 **범위:** Collection·Item 쓰기 Backend·Frontend + Hard Delete 연동
-**비범위:** Collection 상세 Item 「제거」 빠른 연결 해제 (I-3)
+**비범위:** Bulk Delete, Drag & Drop, Category CRUD, RecommendationHistory UI, TMDB, 인증
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -146,8 +147,8 @@ Index (현재):
 - IntegrityError(알려진 FK) → **409** `Related resource changed`
 - 테스트: `tests/test_item_write_api.py` (36) · DELETE·Collection 회귀 포함
 - 격리 DB Smoke: `picknext_item_write_smoke` **16/16**
-- Backend 전체 **195 passed**
-- **잔여:** Collection 상세 Item 「제거」 (I-3)
+- Backend 전체 **195 passed** (I-1 시점) · I-3 최종 **196 passed**
+- **I-3에서 Collection 상세 「제거」 Frontend 연동 완료**
 
 ### 1.2.7 I-2 Item 생성·수정 Frontend 구현 결과 (2026-07-23)
 
@@ -157,9 +158,18 @@ Index (현재):
 - 생성 Context: home / items / collections(locked Collection)
 - 생성 후 Item 상세 진입 · 수정 후 상세 유지 · origin·Snapshot 보존
 - 상태 빠른 변경: Item 상세 기존 버튼 → `updateItem({ status })`
-- Collection 상세 「제거」: 미지원 Toast 유지 (I-3)
+- Collection 상세 「제거」: I-3에서 연동
 - 검증: `verify-item-write-api.mjs` · `verify-item-write-flow.mjs` · tsc · build
-- **잔여:** Collection 상세 빠른 연결 해제
+
+### 1.2.8 I-3 Collection 상세 빠른 작업 · 최종 회귀 (2026-07-23)
+
+- 「제거」= `updateItem({ collection_id: null })` — Item 유지 · 빈 Collection 유지 · DELETE 미호출
+- Confirm Dialog 문구: 영구 삭제와 구분 · 마지막 Item 시 빈 Collection 유지 안내
+- 기존 행 상태 버튼: `updateItem({ status })` PLANNED↔COMPLETED
+- 비낙관적 Reload · 페이지 보정 · 404/409/422/5xx Toast
+- 검증: `verify-collection-item-quick-actions.mjs` · Backend **196 passed** · 격리 DB Smoke **33/33**
+- Seed 비파괴 확인
+- **잔여:** Bulk Delete, Drag & Drop, Category CRUD, History UI, TMDB, 인증, 자동화 Browser E2E
 
 ### 1.2.4 D-7 Frontend 구현 결과 (2026-07-22)
 
@@ -168,9 +178,9 @@ Index (현재):
 - UI: `App.tsx` — `ConfirmModal`(pending), ItemDetailPage·CollectionDetailInline 삭제 Dialog
 - Item origin(home/items/collections) 복귀, Collection GET 404 시 「항목과 빈 컬렉션」 Toast
 - Collection `item_count > 0` → DELETE 미호출 + Toast
-- Item 행 「제거」: Hard Delete 미연결 (연결 해제 미구현 Toast)
+- Item 행 「제거」: I-3에서 연결 해제 (`collection_id: null`) 연동 — Hard Delete 미연결
 - 검증: `npm run build`, `npx tsc --noEmit`, `node scripts/verify-delete-api.mjs`
-- **잔여:** POST·PATCH, Bulk 삭제, Vitest/RTL
+- **잔여 (당시):** POST·PATCH, Bulk 삭제, Vitest/RTL — I-2/I-3에서 POST·PATCH·빠른 제거 완료
 
 ### 1.2.5 D-8 안정화 결과 (2026-07-22)
 
