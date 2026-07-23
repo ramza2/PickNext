@@ -1,6 +1,6 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** RC-1 API·격리 DB 기본 쓰기 Release Candidate 검증 완료 · 브라우저 수동 QA 대기 · PASS WITH NOTES
+**상태:** Collection·Item 기본 쓰기 Release Candidate **PASS** (RC-1 API·격리 DB · RC-2 브라우저 수동 QA · RC-2-A 결함 조치)
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
@@ -12,9 +12,11 @@
 **I-1 구현:** 2026-07-22 — `POST`/`PATCH /api/v1/items` (Validation·Lock·no-op·History Snapshot 불변)
 **I-2 구현:** 2026-07-23 — Frontend Item 생성·수정 Dialog·상태 버튼·PATCH Diff·origin 보존
 **I-3 구현:** 2026-07-23 — Collection 상세 Item 빠른 연결 해제·상태 변경 · 쓰기 최종 회귀
-**RC-1 검증:** 2026-07-23 — API·격리 DB Write Smoke · 자동 회귀 · Seed 비파괴 · **브라우저 수동 QA 대기**
+**RC-1 검증:** 2026-07-23 — API·격리 DB Write Smoke · 자동 회귀 · Seed 비파괴
+**RC-2 검증:** 2026-07-23 — 격리 Backend(:8001)·Frontend(:5175) 브라우저 수동 QA · **PASS**
+**RC-2-A:** 2026-07-23 — Items checkbox Warning · Item Form Inline Validation · **PASS**
 **범위:** Collection·Item 쓰기 Backend·Frontend + Hard Delete 연동
-**비범위:** Bulk Delete, Drag & Drop, Category CRUD, RecommendationHistory UI, TMDB, 인증, 자동화 Browser E2E, Desktop/Mobile 실브라우저 QA
+**비범위:** Bulk Delete, Drag & Drop, Category CRUD, RecommendationHistory UI, TMDB, 인증, 자동화 Browser E2E
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -175,9 +177,9 @@ Index (현재):
 ### 1.2.9 RC-1 API·격리 DB Release Candidate 검증 (2026-07-23)
 
 ```text
-브라우저 수동 QA: 미수행 / 대기
 API·격리 DB Release Candidate 검증: 통과
-최종 판정: PASS WITH NOTES
+당시 브라우저 수동 QA: 대기 → RC-2에서 완료
+당시 판정: PASS WITH NOTES
 ```
 
 - 격리 DB: `picknext_write_rc` · Fixture(영화/드라마/도서 · RC Empty/Single/Multi/Rename · Standalone · History · Legacy · 타 사용자)
@@ -189,9 +191,22 @@ API·격리 DB Release Candidate 검증: 통과
   - History Snapshot 불변 · Legacy Mapping 유지 · 타 사용자 404
 - 자동 회귀: Backend **196 passed** · Frontend verify · tsc · build
 - Seed: 7202 / 249 / 10 / 4708 / 2494 / linked 845 전후 동일
-- **브라우저 수동 QA 대기:** Dialog·Toast·Pending·origin·Network·Console·Desktop·Mobile 미검증 (TestClient로 대체 불가)
-- **판정: PASS WITH NOTES**
-- **잔여:** 실브라우저 UX QA, Bulk Delete, Drag & Drop, Category CRUD, History UI, TMDB, 인증, Collection Options 249건 실측 요청 수
+
+### 1.2.10 RC-2 브라우저 수동 QA · Release Candidate PASS (2026-07-23)
+
+```text
+브라우저 수동 QA: 완료
+최종 판정: PASS
+```
+
+- 환경: `picknext_write_rc` · RC Backend `:8001` · Frontend `:5175` · Seed Backend `:8002` 분리
+- Fixture bootstrap: `backend/scripts/rc2_bootstrap_fixtures.py`
+- Desktop 1440×900 · Mobile 390×844 · Console · Network 확인
+- Collection·Item 기본 쓰기·빠른 작업·마지막 unlink/DELETE 정책 구분 브라우저 검증
+- **RC-2-A PASS:** Items `checked`/`onChange` Warning 제거 · Item Form 필드별 Inline Validation · Focus/Scroll · Write 0회
+- **잔여(별도):** Bulk Delete, Drag & Drop, Category CRUD, History UI, TMDB, 인증, 자동화 Browser E2E
+
+### 1.2.4 D-7 Frontend 구현 결과 (2026-07-22)
 
 - API: `frontend/src/api/catalog.ts` — `deleteItem`, `deleteCollection` (204 → `undefined`)
 - 오류 문구: `frontend/src/api/deleteMessages.ts`

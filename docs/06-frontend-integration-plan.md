@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1 API·격리 DB 기본 쓰기 Release Candidate 검증 완료 (2026-07-23) · 브라우저 수동 QA 대기 · PASS WITH NOTES**
+> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1 API·격리 DB 검증 완료 · RC-2 브라우저 수동 QA 완료 (2026-07-23) · 기본 쓰기 Release Candidate PASS**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (잔여):** Desktop/Mobile 실브라우저 수동 QA(Console·Network), Bulk Delete, Drag & Drop, History/추천/TMDB, 인증, React Router, App.tsx Page 분리, 자동화 Browser E2E
+> **비범위 (잔여):** Bulk Delete, Drag & Drop, History/추천/TMDB, 인증, React Router, App.tsx Page 분리, 자동화 Browser E2E
 
 ## 1. 실행·빌드 확인 결과
 
@@ -246,12 +246,12 @@ frontend/
 - **잔여:** Bulk · DnD · Category CRUD · History UI · TMDB · 인증 · 자동화 Browser E2E
 - **판정 메모:** Desktop/Mobile 실브라우저 시각·Console·Network는 수동 확인 권장 (PASS WITH NOTES)
 
-### Phase RC-1 — API·격리 DB Release Candidate 검증 ✅ 완료 · 브라우저 수동 QA 대기 (2026-07-23)
+### Phase RC-1 — API·격리 DB Release Candidate 검증 ✅ 완료 (2026-07-23)
 
 ```text
 RC-1 API·격리 DB 기본 쓰기 Release Candidate 검증 완료
-브라우저 수동 QA 대기
-최종 판정: PASS WITH NOTES
+당시 브라우저 수동 QA: 대기 → RC-2에서 수행
+당시 판정: PASS WITH NOTES
 ```
 
 확정 통과:
@@ -262,21 +262,66 @@ Backend Transaction·응답 계약: 통과
 Frontend 정적 연결·Build: 통과
 격리 PostgreSQL 실제 쓰기: 통과 (picknext_write_rc Smoke 40/40)
 Seed DB 안전성: 통과
-실사용 브라우저 UX: 미검증
 ```
 
 - 격리 DB `picknext_write_rc` · `scripts/rc1_write_rc_smoke.py` **40/40**
 - 자동 검증: Backend **196 passed** · Frontend verify · tsc · build 통과
 - Seed 비파괴: 7202 / 249 / 10 / PLANNED 4708 / COMPLETED 2494 / linked 845
 - 정책 대조(API Smoke): 마지막 Item unlink → Collection 유지 · 마지막 Item DELETE → Collection 404 · 204 body 길이 0
-- **브라우저 수동 QA: 미수행** — Dialog·Toast·Pending·origin·Network·Console·Desktop 1440×900·Mobile 390×844 미검증
-- **최종 판정: PASS WITH NOTES** (브라우저 미수행 상태에서 PASS로 승격하지 않음)
+
+### Phase RC-2 — 브라우저 수동 QA · Release Candidate ✅ PASS (2026-07-23)
+
+```text
+RC-2 브라우저 수동 QA 완료
+격리 환경: picknext_write_rc · Backend :8001 · Frontend :5175
+Seed Backend :8002 분리 유지
+최종 판정: PASS
+```
+
+환경:
+
+- DB 초기화 + `rc2_bootstrap_fixtures.py` Fixture
+- RC Backend Summary: Items·Collections·Categories가 Seed(7202/249/10)가 아닌 Fixture 규모
+- Frontend `VITE_API_PROXY_TARGET=http://127.0.0.1:8001` (로컬 `.env.development.local`)
+
+브라우저 검증(확정):
+
+```text
+Desktop 1440×900 · Mobile 390×844
+Console · Network(Fetch/XHR)
+Collection·Item CRUD · 상태 변경 · 연결/이동/해제
+빠른 연결 해제 · 빠른 상태 변경
+마지막 Item unlink → Collection 유지
+마지막 Item DELETE → Collection 삭제
+Validation 실패 시 Write 요청 0회
+```
+
+### RC-2-A — Items Console Warning 및 Item Form Validation UX ✅ PASS
+
+상태: **조치 완료 / PASS**
+
+수정:
+
+- Items checkbox에 `onChange` 연결 (`onClick`은 Card 전파 차단만)
+- Item Form Validation을 필드별 Inline Error로 변경
+- Validation 실패 시 첫 오류 필드 Focus·Scroll
+- API·서버 오류는 Form Level Error로 분리
+
+브라우저 재검증:
+
+- Items 재진입 Console Warning 없음
+- Checkbox 선택·Card 이동 정상
+- 제목·Category·진행 상황 오류 위치 정상
+- Validation 실패 시 Write 요청 없음
+- Desktop·Mobile 레이아웃 정상
+
+커밋: `1721553` `fix(frontend): Item 선택 경고와 Form 오류 표시 개선`
 
 ### 다음 권장
 
 ```text
-브라우저 수동 QA (Desktop/Mobile · Console · Network) → PASS 승격 가능
 Bulk Delete / Drag & Drop / Category CRUD / RecommendationHistory UI / TMDB / 인증 (별도)
+자동화 Browser E2E Framework (선택)
 ```
 
 ### Phase I-2 — Item 생성·수정 Frontend ✅ 완료 (2026-07-23)

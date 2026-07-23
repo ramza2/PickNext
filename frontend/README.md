@@ -94,7 +94,7 @@ src/
    └─ layout/AppLayout.tsx
 ```
 
-다음: 브라우저 수동 QA(Desktop/Mobile · Console · Network) → PASS 승격. Bulk Delete / Drag & Drop / Category CRUD / History UI / TMDB / 인증 (별도).
+다음: Bulk Delete / Drag & Drop / Category CRUD / History UI / TMDB / 인증 (별도). 자동화 Browser E2E는 선택.
 
 현재 쓰기 상태:
 
@@ -111,11 +111,12 @@ RC 검증 상태 (2026-07-23):
 
 ```text
 RC-1 API·격리 DB 기본 쓰기 Release Candidate 검증: 완료(통과)
-브라우저 수동 QA: 대기
-실브라우저 Desktop 1440×900: 미수행
-실브라우저 Mobile 390×844: 미수행
-Browser Console / Network: 미수행
-최종 판정: PASS WITH NOTES
+RC-2 브라우저 수동 QA: 완료(통과)
+RC-2-A Items Warning·Form Inline Validation: 조치 완료 / PASS
+실브라우저 Desktop 1440×900: 통과
+실브라우저 Mobile 390×844: 통과
+Browser Console / Network: 통과
+최종 판정: PASS
 ```
 
 지원 Viewport(디자인 기준선): Desktop 1440×900 · Mobile 390×844 (Bottom Nav).
