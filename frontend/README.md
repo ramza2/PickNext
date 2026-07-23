@@ -49,9 +49,9 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | Home — Summary / Categories / 최근 등록 | **API** |
 | Home — 빠른 추천 / 최근 선택 이력 | Mock |
 | Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
-| Item Detail | **API** (`GET /items/{id}`) · **삭제(D-7)** · Poster Placeholder · 수정·상태 변경 미연동 |
+| Item Detail | **API** (`GET /items/{id}`) · **생성·수정(I-2)** · **삭제(D-7)** · 상태 버튼 PATCH · Poster Placeholder |
 | Collections 목록 | **API** (검색·페이지) · **생성(C-2)** |
-| Collection 인라인 상세 / 소속 Item | **API** · **이름 수정(C-2)** · **삭제(D-7)** · Item 행 「제거」= 연결 해제 미구현 |
+| Collection 인라인 상세 / 소속 Item | **API** · **이름 수정(C-2)** · **삭제(D-7)** · Item 추가(I-2) · Item 행 「제거」= 연결 해제 미구현 |
 | History / Recommend / TMDB / Data / Settings | Mock |
 
 API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
@@ -65,7 +65,8 @@ src/
 │  ├─ query.ts
 │  ├─ catalog.ts
 │  ├─ deleteMessages.ts
-│  └─ collectionWriteMessages.ts
+│  ├─ collectionWriteMessages.ts
+│  └─ itemWriteMessages.ts
 ├─ types/
 ├─ mocks/
 ├─ utils/date.ts
@@ -73,6 +74,8 @@ src/
 ├─ scripts/verify-collection-detail-mapper.mjs
 ├─ scripts/verify-delete-api.mjs
 ├─ scripts/verify-collection-write-api.mjs
+├─ scripts/verify-item-write-api.mjs
+├─ scripts/verify-item-write-flow.mjs
 └─ app/
    ├─ App.tsx
    ├─ hooks/useHomeReadData.ts
@@ -90,7 +93,7 @@ src/
    └─ layout/AppLayout.tsx
 ```
 
-다음: Item POST/PATCH (Phase C).
+다음: Collection 상세 Item 「제거」 빠른 연결 해제 (I-3).
 
 상세: [`docs/06-frontend-integration-plan.md`](../docs/06-frontend-integration-plan.md)
 

@@ -36,7 +36,7 @@
 - 추천 이력에서 각 항목의 `item_id`로 상세 화면에 이동할 수 있어야 한다.
 - 상세 화면에서 완료 상태(`PLANNED` ↔ `COMPLETED`)를 수정할 수 있어야 한다.
 - Item Hard Delete(`DELETE /api/v1/items/{id}`, D-3~D-5 구현) 시 해당 Item을 포함한 `recommendation_history` **전체**와 연결 행·Snapshot을 함께 삭제한다.
-- Item PATCH(`PATCH /api/v1/items/{id}`, I-1 구현)는 `title_snapshot`·`status_at_selection` 등 추천 이력 Snapshot을 **수정하지 않는다**. Snapshot 갱신·History 삭제는 Item DELETE에서만 수행한다.
+- Item PATCH(`PATCH /api/v1/items/{id}`, I-1 구현) 및 Item Frontend 수정(I-2)은 `title_snapshot`·`status_at_selection` 등 추천 이력 Snapshot을 **수정하지 않는다**. Snapshot 갱신·History 삭제는 Item DELETE에서만 수행한다.
 - 같은 History에 있던 다른 Item **본체**는 유지한다.
 - 연결 행만 지우고 부모 History를 남기지 않는다.
 

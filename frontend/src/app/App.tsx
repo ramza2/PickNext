@@ -62,7 +62,7 @@ import {
   mapApiItemDetailToViewModel,
 } from "./mappers/itemDetail";
 import { formatDate } from "../utils/date";
-import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection } from "../api/catalog";
+import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories, getAllCollectionsForSelect } from "../api/catalog";
 import {
   collectionCreateFailureToast,
   collectionPatchNotFoundToast,
@@ -73,13 +73,41 @@ import {
   normalizeCollectionNameInput,
   validateCollectionName,
 } from "../api/collectionWriteMessages";
+import {
+  ITEM_CATEGORY_EMPTY_LIST_ERROR,
+  ITEM_COLLECTION_NOT_FOUND_TOAST,
+  ITEM_NOT_FOUND_TOAST,
+  ITEM_PATCH_CONFLICT_ERROR,
+  ITEM_RELATED_CHANGED_ERROR,
+  ITEM_RELATED_NOT_FOUND_ERROR,
+  ITEM_STATUS_CHECK_FAILED_TOAST,
+  ITEM_WRITE_VALIDATION_ERROR,
+  RATING_OPTIONS,
+  buildItemCreatePayload,
+  buildItemUpdatePayload,
+  itemCreateFailureToast,
+  itemFormValuesFromDetail,
+  itemStatusConflictToast,
+  itemStatusSuccessToast,
+  itemStatusUpdateFailureToast,
+  itemStatusValidationToast,
+  itemUpdateFailureToast,
+  isItemWriteNetworkOrServerError,
+  normalizeNullableText,
+  validateItemFormValues,
+  type ItemFormValues,
+} from "../api/itemWriteMessages";
 import { ApiError } from "../api/client";
 import {
   collectionDeleteErrorMessage,
   itemDeleteErrorMessage,
 } from "../api/deleteMessages";
+import type { ApiCategory, ApiCollection, ApiItemDetail, ApiItemStatus } from "../types/api";
+import { getCategoryPresentation } from "./presentation/categoryPresentation";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+type ItemDetailOrigin = "items" | "home" | "collections";
 
 const getCat = (id: string) => CATEGORIES.find(c => c.id === id);
 const getCol = (id: string) => COLLECTIONS.find(c => c.id === id);
@@ -559,145 +587,572 @@ function TMDBRegisterForm({ result, onClose, onSave, showToast }: {
 
 // ─── Item Form Modal ──────────────────────────────────────────────────────────
 
-function ItemFormModal({ editItem, onClose, onSave, showToast }: {
-  editItem?: Item; onClose: () => void;
-  onSave: () => void; showToast: (m: string) => void;
-}) {
-  const [title, setTitle]     = useState(editItem?.title || "");
-  const [catId, setCatId]     = useState(editItem?.categoryId || "");
-  const [status, setStatus]   = useState<Status>(editItem?.status || "PLANNED");
-  const [rating, setRating]   = useState<number|undefined>(editItem?.rating);
-  const [colId, setColId]     = useState<string|undefined>(editItem?.collectionId);
-  const [prog, setProg]       = useState(editItem?.progressNote || "");
-  const [memo, setMemo]       = useState(editItem?.memo || "");
-  const [release, setRelease] = useState(editItem?.releaseDate || "");
-  const isEdit = !!editItem;
+type ItemFormSession =
+  | {
+      mode: "create";
+      origin: ItemDetailOrigin;
+      initialCategoryId?: string | null;
+      initialCollectionId?: string | null;
+      lockedCollection?: { id: string; name: string };
+      collectionItemsPage?: number;
+    }
+  | {
+      mode: "edit";
+      item: ApiItemDetail;
+      origin: ItemDetailOrigin;
+      collectionId?: string;
+      collectionItemsPage?: number;
+    };
 
-  const handleSave = () => {
-    if (!title.trim() || !catId) return;
-    onSave();
-    showToast(isEdit ? "항목이 수정되었습니다." : "항목이 등록되었습니다.");
-    onClose();
+function emptyItemFormValues(
+  overrides?: Partial<ItemFormValues>,
+): ItemFormValues {
+  return {
+    title: "",
+    categoryId: "",
+    collectionId: null,
+    status: "PLANNED",
+    rating: 0,
+    progressNote: "",
+    memo: "",
+    ...overrides,
+  };
+}
+
+function ItemFormModal({
+  session,
+  busy,
+  onBusyChange,
+  onClose,
+  onCreated,
+  onUpdated,
+  onItemMissing,
+  onLockedCollectionMissing,
+  showToast,
+}: {
+  session: ItemFormSession;
+  busy: boolean;
+  onBusyChange: (value: boolean) => void;
+  onClose: () => void;
+  onCreated: (item: ApiItemDetail, session: Extract<ItemFormSession, { mode: "create" }>) => void | Promise<void>;
+  onUpdated: (item: ApiItemDetail, session: Extract<ItemFormSession, { mode: "edit" }>) => void | Promise<void>;
+  onItemMissing: (session: Extract<ItemFormSession, { mode: "edit" }>) => void | Promise<void>;
+  onLockedCollectionMissing: () => void | Promise<void>;
+  showToast: (m: string) => void;
+}) {
+  const isEdit = session.mode === "edit";
+  const lockedCollection =
+    session.mode === "create" ? session.lockedCollection : undefined;
+
+  const [values, setValues] = useState<ItemFormValues>(() => {
+    if (session.mode === "edit") return itemFormValuesFromDetail(session.item);
+    return emptyItemFormValues({
+      categoryId: session.initialCategoryId ?? "",
+      collectionId:
+        session.lockedCollection?.id
+        ?? session.initialCollectionId
+        ?? null,
+    });
+  });
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
+  const [collections, setCollections] = useState<ApiCollection[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const titleId = "item-form-modal-title";
+  const errorId = "item-form-modal-error";
+  const formBusy = pending || busy;
+
+  const progressLength = normalizeNullableText(values.progressNote)?.length ?? 0;
+  const inlineError = validationError ?? serverError;
+
+  const editHasChanges = useMemo(() => {
+    if (session.mode !== "edit") return true;
+    return Object.keys(buildItemUpdatePayload(values, session.item)).length > 0;
+  }, [session, values]);
+
+  const reloadOptions = useCallback(async () => {
+    setOptionsLoading(true);
+    setOptionsError(null);
+    try {
+      const [categoriesResponse, collectionRows] = await Promise.all([
+        getCategories(),
+        getAllCollectionsForSelect(),
+      ]);
+      let nextCollections = collectionRows;
+      if (
+        session.mode === "edit"
+        && session.item.collection
+        && !collectionRows.some((row) => row.id === session.item.collection?.id)
+      ) {
+        nextCollections = [
+          {
+            id: session.item.collection.id,
+            name: session.item.collection.name,
+            item_count: 0,
+            planned_count: 0,
+            completed_count: 0,
+            categories: [],
+            created_at: session.item.created_at,
+            updated_at: session.item.updated_at,
+          },
+          ...collectionRows,
+        ];
+      }
+      setCategories(categoriesResponse.categories);
+      setCollections(nextCollections);
+      return {
+        categories: categoriesResponse.categories,
+        collections: nextCollections,
+      };
+    } catch {
+      setOptionsError("카테고리 또는 컬렉션 목록을 불러오지 못했습니다.");
+      return null;
+    } finally {
+      setOptionsLoading(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    void reloadOptions();
+  }, [reloadOptions]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => titleRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (formBusy) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [formBusy, onClose]);
+
+  const updateField = <K extends keyof ItemFormValues>(
+    key: K,
+    value: ItemFormValues[K],
+  ) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
+    setValidationError(null);
+    if (serverError) setServerError(null);
   };
 
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (formBusy) return;
+
+    const categoriesEmpty = !optionsLoading && categories.length === 0;
+    const validationMessage = validateItemFormValues(values, {
+      categoriesEmpty,
+    });
+    if (validationMessage) {
+      setValidationError(validationMessage);
+      setServerError(null);
+      return;
+    }
+
+    if (isEdit && session.mode === "edit") {
+      const payload = buildItemUpdatePayload(values, session.item);
+      if (Object.keys(payload).length === 0) {
+        onClose();
+        return;
+      }
+      setPending(true);
+      onBusyChange(true);
+      setValidationError(null);
+      setServerError(null);
+      try {
+        const updated = await updateItem(session.item.id, payload);
+        await onUpdated(updated, session);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          try {
+            await getItem(session.item.id);
+            setServerError(ITEM_RELATED_NOT_FOUND_ERROR);
+            const loaded = await reloadOptions();
+            if (loaded) {
+              if (
+                values.categoryId
+                && !loaded.categories.some((row) => row.id === values.categoryId)
+              ) {
+                updateField("categoryId", "");
+              }
+              if (
+                values.collectionId
+                && !loaded.collections.some((row) => row.id === values.collectionId)
+              ) {
+                updateField("collectionId", null);
+              }
+            }
+          } catch (confirmErr) {
+            if (confirmErr instanceof ApiError && confirmErr.status === 404) {
+              await onItemMissing(session);
+            } else {
+              showToast(ITEM_STATUS_CHECK_FAILED_TOAST);
+            }
+          }
+        } else if (err instanceof ApiError && err.status === 409) {
+          setServerError(ITEM_PATCH_CONFLICT_ERROR);
+          await reloadOptions();
+          try {
+            const fresh = await getItem(session.item.id);
+            setValues(itemFormValuesFromDetail(fresh));
+          } catch {
+            /* keep current form values */
+          }
+        } else if (err instanceof ApiError && err.status === 422) {
+          setServerError(ITEM_WRITE_VALIDATION_ERROR);
+        } else if (isItemWriteNetworkOrServerError(err)) {
+          showToast(itemUpdateFailureToast());
+        } else {
+          showToast(itemUpdateFailureToast());
+        }
+      } finally {
+        setPending(false);
+        onBusyChange(false);
+      }
+      return;
+    }
+
+    if (session.mode !== "create") return;
+    const payload = buildItemCreatePayload(values);
+    setPending(true);
+    onBusyChange(true);
+    setValidationError(null);
+    setServerError(null);
+    try {
+      const created = await createItem(payload);
+      await onCreated(created, session);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        if (lockedCollection) {
+          try {
+            await getCollection(lockedCollection.id);
+            setServerError(ITEM_RELATED_NOT_FOUND_ERROR);
+            await reloadOptions();
+          } catch (colErr) {
+            if (colErr instanceof ApiError && colErr.status === 404) {
+              await onLockedCollectionMissing();
+            } else {
+              setServerError(ITEM_RELATED_NOT_FOUND_ERROR);
+            }
+          }
+        } else {
+          setServerError(ITEM_RELATED_NOT_FOUND_ERROR);
+          const loaded = await reloadOptions();
+          if (
+            loaded
+            && values.categoryId
+            && !loaded.categories.some((row) => row.id === values.categoryId)
+          ) {
+            updateField("categoryId", "");
+          }
+          if (
+            loaded
+            && values.collectionId
+            && !loaded.collections.some((row) => row.id === values.collectionId)
+          ) {
+            updateField("collectionId", null);
+          }
+        }
+      } else if (err instanceof ApiError && err.status === 409) {
+        setServerError(ITEM_RELATED_CHANGED_ERROR);
+        await reloadOptions();
+      } else if (err instanceof ApiError && err.status === 422) {
+        setServerError(ITEM_WRITE_VALIDATION_ERROR);
+      } else if (isItemWriteNetworkOrServerError(err)) {
+        showToast(itemCreateFailureToast());
+      } else {
+        showToast(itemCreateFailureToast());
+      }
+    } finally {
+      setPending(false);
+      onBusyChange(false);
+    }
+  };
+
+  const handleOverlayClick = () => {
+    if (!formBusy) onClose();
+  };
+
+  const collectionOptions = collections;
+  const submitDisabled =
+    formBusy
+    || optionsLoading
+    || (isEdit && !editHasChanges)
+    || (!optionsLoading && categories.length === 0);
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch sm:items-center justify-center">
-      <div className="bg-card w-full sm:max-w-lg sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl">
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-stretch sm:items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onClick={handleOverlayClick}
+    >
+      <form
+        className="bg-card w-full sm:max-w-lg sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => void handleSubmit(event)}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-          <h2 className="font-bold text-foreground">{isEdit ? "항목 수정" : "직접 항목 등록"}</h2>
-          <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"><X size={18}/></button>
+          <h2 id={titleId} className="font-bold text-foreground">
+            {isEdit ? "항목 수정" : "새 항목"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={formBusy}
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
+          >
+            <X size={18}/>
+          </button>
         </div>
+
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">제목 <span className="text-red-500">*</span></label>
-            <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="제목을 입력하세요"
-              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"/>
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Category <span className="text-red-500">*</span></label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {CATEGORIES.map(cat => (
-                <button key={cat.id} type="button" onClick={() => setCatId(cat.id)}
-                  className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs font-medium transition-colors ${catId===cat.id?"border-primary bg-blue-50 text-blue-700":"border-border hover:border-primary/30 text-foreground"}`}>
-                  <span style={{ color: cat.color }}>{cat.icon}</span>{cat.name}
-                </button>
-              ))}
+          {optionsError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {optionsError}{" "}
+              <button
+                type="button"
+                className="underline font-medium"
+                onClick={() => void reloadOptions()}
+                disabled={formBusy}
+              >
+                다시 시도
+              </button>
             </div>
+          )}
+
+          {!optionsLoading && categories.length === 0 && (
+            <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {ITEM_CATEGORY_EMPTY_LIST_ERROR}
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="item-form-title" className="block text-sm font-medium text-foreground mb-1.5">
+              제목 <span className="text-red-500">*</span>
+            </label>
+            <input
+              ref={titleRef}
+              id="item-form-title"
+              value={values.title}
+              onChange={(event) => updateField("title", event.target.value)}
+              placeholder="제목을 입력하세요"
+              disabled={formBusy}
+              aria-invalid={inlineError ? true : undefined}
+              aria-describedby={inlineError ? errorId : undefined}
+              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+            />
           </div>
 
-          {/* Status */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">상태</label>
+            <span className="block text-sm font-medium text-foreground mb-1.5">
+              Category <span className="text-red-500">*</span>
+            </span>
+            {optionsLoading ? (
+              <p className="text-xs text-muted-foreground">카테고리 불러오는 중…</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                {categories.map((cat) => {
+                  const presentation = getCategoryPresentation(cat.name);
+                  const Icon = presentation.icon;
+                  const selected = values.categoryId === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      disabled={formBusy}
+                      onClick={() => updateField("categoryId", cat.id)}
+                      className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50 ${
+                        selected
+                          ? "border-primary bg-blue-50 text-blue-700"
+                          : "border-border hover:border-primary/30 text-foreground"
+                      }`}
+                    >
+                      <Icon size={14} style={{ color: presentation.color }}/>
+                      <span className="truncate">{cat.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <span className="block text-sm font-medium text-foreground mb-1.5">상태</span>
             <div className="flex bg-muted rounded-xl p-0.5">
-              {(["PLANNED","COMPLETED"] as Status[]).map(s => (
-                <button key={s} type="button" onClick={() => setStatus(s)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${status===s?"bg-card shadow text-foreground":"text-muted-foreground hover:text-foreground"}`}>
-                  {s==="PLANNED"?"앞으로 볼 항목":"완료 항목"}
+              {(["PLANNED", "COMPLETED"] as ApiItemStatus[]).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  disabled={formBusy}
+                  onClick={() => updateField("status", status)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                    values.status === status
+                      ? "bg-card shadow text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {status === "PLANNED" ? "볼 예정" : "완료"}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Rating */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">평점 <span className="text-muted-foreground font-normal text-xs">(선택 · 0.5점 단위)</span></label>
-            <StarPicker value={rating} onChange={setRating} />
-          </div>
-
-          {/* Collection */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Collection <span className="text-muted-foreground font-normal text-xs">(선택)</span></label>
-            <select value={colId || ""} onChange={e => setColId(e.target.value || undefined)}
-              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25">
-              <option value="">Collection 미지정</option>
-              {COLLECTIONS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <label htmlFor="item-form-rating" className="block text-sm font-medium text-foreground mb-1.5">
+              평점
+            </label>
+            <select
+              id="item-form-rating"
+              value={String(values.rating)}
+              disabled={formBusy}
+              onChange={(event) => updateField("rating", Number(event.target.value))}
+              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+            >
+              {RATING_OPTIONS.map((rating) => (
+                <option key={rating} value={rating}>
+                  {rating === 0 ? "미평가 (0)" : rating.toFixed(1)}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Progress Note */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Progress Note <span className="text-muted-foreground font-normal text-xs">(Collection과 구분됩니다)</span></label>
-            <input value={prog} onChange={e=>setProg(e.target.value)}
-              placeholder="예: 1~82, 84, 87~89 / 15권까지 읽음"
-              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"/>
+            <label htmlFor="item-form-collection" className="block text-sm font-medium text-foreground mb-1.5">
+              Collection <span className="text-muted-foreground font-normal text-xs">(선택)</span>
+            </label>
+            {lockedCollection ? (
+              <input
+                id="item-form-collection"
+                value={lockedCollection.name}
+                readOnly
+                disabled
+                className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-muted text-foreground disabled:opacity-80"
+              />
+            ) : (
+              <select
+                id="item-form-collection"
+                value={values.collectionId ?? ""}
+                disabled={formBusy || optionsLoading}
+                onChange={(event) =>
+                  updateField("collectionId", event.target.value || null)
+                }
+                className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+              >
+                <option value="">컬렉션 없음</option>
+                {collectionOptions.map((collection) => (
+                  <option key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          {/* Release date */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">출시·방영일 <span className="text-muted-foreground font-normal text-xs">(선택)</span></label>
-            <input type="date" value={release} onChange={e=>setRelease(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"/>
+            <label htmlFor="item-form-progress" className="block text-sm font-medium text-foreground mb-1.5">
+              진행 상황 <span className="text-muted-foreground font-normal text-xs">(선택)</span>
+            </label>
+            <input
+              id="item-form-progress"
+              value={values.progressNote}
+              disabled={formBusy}
+              onChange={(event) => updateField("progressNote", event.target.value)}
+              placeholder="예: 시즌 2 / 15권까지 읽음"
+              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+            />
+            <div className="flex justify-end mt-1">
+              <span className="text-xs text-muted-foreground">{progressLength}/200</span>
+            </div>
           </div>
 
-          {/* Memo */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">메모 <span className="text-muted-foreground font-normal text-xs">(선택)</span></label>
-            <textarea value={memo} onChange={e=>setMemo(e.target.value)} rows={2}
+            <label htmlFor="item-form-memo" className="block text-sm font-medium text-foreground mb-1.5">
+              메모 <span className="text-muted-foreground font-normal text-xs">(선택)</span>
+            </label>
+            <textarea
+              id="item-form-memo"
+              value={values.memo}
+              disabled={formBusy}
+              onChange={(event) => updateField("memo", event.target.value)}
+              rows={3}
               placeholder="개인 메모"
-              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 resize-none"/>
+              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 resize-y min-h-[5rem] disabled:opacity-50"
+            />
           </div>
 
-          {/* Poster placeholder */}
-          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
-            <Lock size={14} className="text-muted-foreground flex-shrink-0"/>
-            <span className="text-xs text-muted-foreground">포스터 URL·이미지 업로드는 향후 제공 예정입니다.</span>
-          </div>
+          {inlineError && (
+            <p id={errorId} className="text-xs text-red-600 break-words">{inlineError}</p>
+          )}
         </div>
+
         <div className="px-5 py-4 border-t border-border flex gap-3 flex-shrink-0">
-          <button onClick={onClose}
-            className="flex-1 border border-border text-foreground py-2.5 rounded-xl font-medium hover:bg-muted transition-colors text-sm">취소</button>
-          <button onClick={handleSave} disabled={!title.trim() || !catId}
-            className="flex-1 bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-700 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-            저장
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={formBusy}
+            className="flex-1 border border-border text-foreground py-2.5 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            취소
+          </button>
+          <button
+            type="submit"
+            disabled={submitDisabled}
+            className="flex-1 bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-700 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {formBusy
+              ? (isEdit ? "저장 중..." : "추가 중...")
+              : (isEdit ? "저장" : "추가")}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
 
 // ─── Item Detail Page ─────────────────────────────────────────────────────────
 
-function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로", origin = "items", collectionId, collectionItemsPage, onDeleteSuccess }: {
+function ItemDetailPage({
+  itemId,
+  onBack,
+  showToast,
+  backLabel = "목록으로",
+  origin = "items",
+  collectionId,
+  collectionItemsPage,
+  onDeleteSuccess,
+  onEdit,
+  writeBusy,
+}: {
   itemId: string | null;
   onBack: () => void;
   showToast: (m: string) => void;
   backLabel?: string;
-  origin?: "items" | "home" | "collections";
+  origin?: ItemDetailOrigin;
   collectionId?: string;
   collectionItemsPage?: number;
   onDeleteSuccess?: (context: {
-    origin: "items" | "home" | "collections";
+    origin: ItemDetailOrigin;
     collectionId?: string;
     collectionItemsPage?: number;
   }) => void | Promise<void>;
+  onEdit?: (item: ApiItemDetail) => void;
+  writeBusy?: boolean;
 }) {
   const { item, isLoading, error, reload } = useItemDetail(itemId);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [statusPending, setStatusPending] = useState(false);
+  const actionBusy = Boolean(writeBusy) || deletePending || statusPending;
 
   if (!itemId) {
     return (
@@ -823,7 +1278,7 @@ function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로",
     .join("\n");
 
   const handleDeleteConfirm = async () => {
-    if (!item || deletePending) return;
+    if (!item || deletePending || actionBusy) return;
     setDeletePending(true);
     try {
       await deleteItem(item.id);
@@ -856,6 +1311,50 @@ function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로",
       }
     } finally {
       setDeletePending(false);
+    }
+  };
+
+  const handleStatusToggle = async () => {
+    if (!item || actionBusy) return;
+    const nextStatus: ApiItemStatus =
+      item.status === "PLANNED" ? "COMPLETED" : "PLANNED";
+    setStatusPending(true);
+    try {
+      await updateItem(item.id, { status: nextStatus });
+      await reload();
+      showToast(itemStatusSuccessToast(nextStatus));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        try {
+          await getItem(item.id);
+          showToast(itemStatusConflictToast());
+          await reload();
+        } catch (confirmErr) {
+          if (confirmErr instanceof ApiError && confirmErr.status === 404) {
+            if (onDeleteSuccess) {
+              await onDeleteSuccess({
+                origin,
+                collectionId: collectionId ?? item.collection?.id ?? undefined,
+                collectionItemsPage,
+              });
+            } else {
+              onBack();
+            }
+            showToast(ITEM_NOT_FOUND_TOAST);
+          } else {
+            showToast(ITEM_STATUS_CHECK_FAILED_TOAST);
+          }
+        }
+      } else if (err instanceof ApiError && err.status === 409) {
+        showToast(itemStatusConflictToast());
+        await reload();
+      } else if (err instanceof ApiError && err.status === 422) {
+        showToast(itemStatusValidationToast());
+      } else {
+        showToast(itemStatusUpdateFailureToast());
+      }
+    } finally {
+      setStatusPending(false);
     }
   };
 
@@ -905,32 +1404,56 @@ function ItemDetailPage({ itemId, onBack, showToast, backLabel = "목록으로",
         <p className="text-sm text-muted-foreground leading-relaxed">등록된 상세 설명이 없습니다.</p>
       </div>
 
-      {/* Actions — write APIs not connected */}
+      {/* Actions */}
       <div className="space-y-2.5">
-        <button onClick={() => showToast("항목 수정 기능은 다음 단계에서 제공됩니다.")}
-          className="w-full flex items-center gap-2 justify-center border border-border bg-card text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
+        <button
+          type="button"
+          disabled={actionBusy || showDeleteConfirm}
+          onClick={() => {
+            if (item && onEdit) onEdit(item);
+          }}
+          className="w-full flex items-center gap-2 justify-center border border-border bg-card text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Edit2 size={15}/> 수정
         </button>
 
         {vm.status === "PLANNED" ? (
-          <button onClick={() => showToast("상태 변경 기능은 다음 단계에서 제공됩니다.")}
-            className="w-full flex items-center gap-2 justify-center bg-emerald-600 text-white py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors text-sm">
-            <Check size={15}/> 완료 처리
+          <button
+            type="button"
+            disabled={actionBusy || showDeleteConfirm}
+            onClick={() => void handleStatusToggle()}
+            className="w-full flex items-center gap-2 justify-center bg-emerald-600 text-white py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Check size={15}/> {statusPending ? "변경 중..." : "완료 처리"}
           </button>
         ) : (
-          <button onClick={() => showToast("상태 변경 기능은 다음 단계에서 제공됩니다.")}
-            className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
-            <RefreshCw size={15}/> PLANNED로 되돌리기
+          <button
+            type="button"
+            disabled={actionBusy || showDeleteConfirm}
+            onClick={() => void handleStatusToggle()}
+            className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={15}/> {statusPending ? "변경 중..." : "볼 예정으로 변경"}
           </button>
         )}
 
-        <button onClick={() => showToast("항목 수정 기능은 다음 단계에서 제공됩니다.")}
-          className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm">
+        <button
+          type="button"
+          disabled={actionBusy || showDeleteConfirm}
+          onClick={() => {
+            if (item && onEdit) onEdit(item);
+          }}
+          className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Layers size={15}/> Collection 이동
         </button>
 
-        <button onClick={() => setShowDeleteConfirm(true)}
-          className="w-full flex items-center gap-2 justify-center border border-red-200 text-red-600 py-3 rounded-xl font-medium hover:bg-red-50 transition-colors text-sm">
+        <button
+          type="button"
+          disabled={actionBusy}
+          onClick={() => setShowDeleteConfirm(true)}
+          className="w-full flex items-center gap-2 justify-center border border-red-200 text-red-600 py-3 rounded-xl font-medium hover:bg-red-50 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Trash2 size={15}/> 삭제
         </button>
       </div>
@@ -1841,7 +2364,7 @@ function ItemsPage({
   onSnapshotChange,
 }: {
   showToast: (m: string) => void;
-  openAddItem: () => void;
+  openAddItem: (opts?: { categoryId?: string | null }) => void;
   openItemDetail: (itemId: string) => void;
   initialSnapshot?: ItemsPageStateSnapshot | null;
   onSnapshotChange?: (snapshot: ItemsPageStateSnapshot) => void;
@@ -2000,7 +2523,7 @@ function ItemsPage({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-foreground">전체 항목</h1>
-        <button onClick={openAddItem}
+        <button onClick={() => openAddItem({ categoryId })}
           className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
           <Plus size={14}/> 신규 항목 추가
         </button>
@@ -2320,6 +2843,8 @@ function CollectionsPage({
   selection,
   onSelectionChange,
   openItemDetail,
+  openAddItem,
+  itemWriteBusy,
 }: {
   showToast: (m: string) => void;
   initialSnapshot?: CollectionsQuerySnapshot | null;
@@ -2330,6 +2855,12 @@ function CollectionsPage({
     itemId: string,
     context: { collectionId: string; collectionItemsPage: number },
   ) => void;
+  openAddItem: (opts: {
+    origin: "collections";
+    lockedCollection: { id: string; name: string };
+    collectionItemsPage?: number;
+  }) => void;
+  itemWriteBusy?: boolean;
 }) {
   const onSnapshotChangeRef = useRef(onSnapshotChange);
   onSnapshotChangeRef.current = onSnapshotChange;
@@ -2373,6 +2904,7 @@ function CollectionsPage({
   const [createServerError, setCreateServerError] = useState<string | null>(null);
 
   const openCreateModal = () => {
+    if (itemWriteBusy) return;
     setCreateName("");
     setCreatePending(false);
     setCreateValidationError(null);
@@ -2429,6 +2961,8 @@ function CollectionsPage({
         }
         onBack={() => onSelectionChange(null)}
         openItemDetail={openItemDetail}
+        openAddItem={openAddItem}
+        itemWriteBusy={itemWriteBusy}
         showToast={showToast}
         onCollectionDeleted={() => {
           onSelectionChange(null);
@@ -2452,7 +2986,8 @@ function CollectionsPage({
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+          disabled={itemWriteBusy}
+          className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus size={14}/> 추가
         </button>
@@ -2640,6 +3175,8 @@ function CollectionDetailInline({
   onItemsPageChange,
   onBack,
   openItemDetail,
+  openAddItem,
+  itemWriteBusy,
   showToast,
   onCollectionDeleted,
   onCollectionUpdated,
@@ -2653,6 +3190,12 @@ function CollectionDetailInline({
     itemId: string,
     context: { collectionId: string; collectionItemsPage: number },
   ) => void;
+  openAddItem: (opts: {
+    origin: "collections";
+    lockedCollection: { id: string; name: string };
+    collectionItemsPage?: number;
+  }) => void;
+  itemWriteBusy?: boolean;
   showToast: (m: string) => void;
   onCollectionDeleted: () => void;
   onCollectionUpdated: () => void;
@@ -2944,8 +3487,16 @@ function CollectionDetailInline({
           </button>
           <button
             type="button"
-            onClick={() => showToast("Item 추가 API는 아직 연결되지 않았습니다.")}
-            className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1"
+            disabled={itemWriteBusy || showDeleteConfirm || deletePending || showEditModal || editPending}
+            onClick={() => {
+              if (!collection) return;
+              openAddItem({
+                origin: "collections",
+                lockedCollection: { id: collection.id, name: collection.name },
+                collectionItemsPage: page,
+              });
+            }}
+            className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={12}/> 직접 추가
           </button>
@@ -3450,8 +4001,6 @@ function SettingsPage({ setPage }: { setPage: (p: Page) => void }) {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
-type ItemDetailOrigin = "items" | "home" | "collections";
-
 interface ItemDetailSelection {
   itemId: string;
   origin: ItemDetailOrigin;
@@ -3472,8 +4021,9 @@ export default function App() {
   const [selectedHistory, setSelectedHistory] = useState<HistoryEntry | null>(null);
   const [recommendCats, setRecommendCats]     = useState<string[]>([]);
   const [toast, setToast]                     = useState<string | null>(null);
-  const [addItemOpen, setAddItemOpen]         = useState(false);
-  const [editItemTarget, setEditItemTarget]   = useState<Item | null>(null);
+  const [itemFormSession, setItemFormSession] = useState<ItemFormSession | null>(null);
+  const [itemWriteBusy, setItemWriteBusy] = useState(false);
+  const [itemDetailNonce, setItemDetailNonce] = useState(0);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -3493,6 +4043,100 @@ export default function App() {
     });
     setPage("item-detail");
   }, []);
+
+  const closeItemForm = useCallback(() => {
+    if (itemWriteBusy) return;
+    setItemFormSession(null);
+  }, [itemWriteBusy]);
+
+  const openCreateItem = useCallback((
+    options?: {
+      origin?: ItemDetailOrigin;
+      categoryId?: string | null;
+      collectionId?: string | null;
+      lockedCollection?: { id: string; name: string };
+      collectionItemsPage?: number;
+    },
+  ) => {
+    if (itemWriteBusy || itemFormSession) return;
+    const origin = options?.origin
+      ?? (page === "home" || page === "items" || page === "collections"
+        ? page
+        : "items");
+    setItemFormSession({
+      mode: "create",
+      origin,
+      initialCategoryId: options?.categoryId ?? null,
+      initialCollectionId: options?.collectionId ?? null,
+      lockedCollection: options?.lockedCollection,
+      collectionItemsPage: options?.collectionItemsPage,
+    });
+  }, [itemFormSession, itemWriteBusy, page]);
+
+  const openEditItem = useCallback((item: ApiItemDetail) => {
+    if (itemWriteBusy || itemFormSession) return;
+    const selection = itemDetailSelection;
+    setItemFormSession({
+      mode: "edit",
+      item,
+      origin: selection?.origin ?? "items",
+      collectionId: selection?.collectionId,
+      collectionItemsPage: selection?.collectionItemsPage,
+    });
+  }, [itemDetailSelection, itemFormSession, itemWriteBusy]);
+
+  const handleItemCreated = useCallback(async (
+    created: ApiItemDetail,
+    session: Extract<ItemFormSession, { mode: "create" }>,
+  ) => {
+    setItemFormSession(null);
+    if (session.origin === "collections" && session.lockedCollection) {
+      setCollectionDetailSelection({
+        collectionId: session.lockedCollection.id,
+        itemsPage: session.collectionItemsPage ?? 1,
+      });
+      openItemDetail(created.id, "collections", {
+        collectionId: session.lockedCollection.id,
+        collectionItemsPage: session.collectionItemsPage ?? 1,
+      });
+    } else {
+      openItemDetail(created.id, session.origin);
+    }
+    showToast("항목을 추가했습니다.");
+  }, [openItemDetail, showToast]);
+
+  const handleItemUpdated = useCallback(async (
+    updated: ApiItemDetail,
+    session: Extract<ItemFormSession, { mode: "edit" }>,
+  ) => {
+    setItemFormSession(null);
+    setItemDetailSelection((prev) => (
+      prev
+        ? {
+            ...prev,
+            itemId: updated.id,
+            origin: session.origin,
+            collectionId: session.collectionId,
+            collectionItemsPage: session.collectionItemsPage,
+          }
+        : {
+            itemId: updated.id,
+            origin: session.origin,
+            collectionId: session.collectionId,
+            collectionItemsPage: session.collectionItemsPage,
+          }
+    ));
+    setPage("item-detail");
+    setItemDetailNonce((value) => value + 1);
+    showToast("항목을 수정했습니다.");
+  }, [showToast]);
+
+  const handleLockedCollectionMissing = useCallback(async () => {
+    setItemFormSession(null);
+    setCollectionDetailSelection(null);
+    setPage("collections");
+    showToast(ITEM_COLLECTION_NOT_FOUND_TOAST);
+  }, [showToast]);
 
   const closeItemDetail = useCallback(() => {
     const selection = itemDetailSelection;
@@ -3551,6 +4195,31 @@ export default function App() {
     showToast("항목을 삭제했습니다.");
   }, [showToast]);
 
+  const handleEditItemMissing = useCallback(async (
+    session: Extract<ItemFormSession, { mode: "edit" }>,
+  ) => {
+    setItemFormSession(null);
+    setItemDetailSelection(null);
+    if (session.origin === "collections" && session.collectionId) {
+      try {
+        await getCollection(session.collectionId);
+        setCollectionDetailSelection({
+          collectionId: session.collectionId,
+          itemsPage: session.collectionItemsPage ?? 1,
+        });
+        setPage("collections");
+      } catch {
+        setCollectionDetailSelection(null);
+        setPage("collections");
+      }
+    } else if (session.origin === "home") {
+      setPage("home");
+    } else {
+      setPage("items");
+    }
+    showToast(ITEM_NOT_FOUND_TOAST);
+  }, [showToast]);
+
   const navigateFromLayout = useCallback((next: Page) => {
     if (next !== "item-detail") {
       setItemDetailSelection(null);
@@ -3563,7 +4232,6 @@ export default function App() {
 
   const navigateToHistory = (h: HistoryEntry) => { setSelectedHistory(h); setPage("history-detail"); };
   const navigateToRecommend = (cats: string[]) => { setRecommendCats(cats); setPage("recommend"); };
-  const openAddItem = () => { setEditItemTarget(null); setAddItemOpen(true); };
 
   const renderPage = () => {
     switch (page) {
@@ -3572,7 +4240,7 @@ export default function App() {
           <HomePage
             setPage={setPage}
             navigateToRecommend={navigateToRecommend}
-            openAddItem={openAddItem}
+            openAddItem={() => openCreateItem({ origin: "home" })}
             openItemDetail={(id) => openItemDetail(id, "home")}
           />
         );
@@ -3582,7 +4250,12 @@ export default function App() {
         return (
           <ItemsPage
             showToast={showToast}
-            openAddItem={openAddItem}
+            openAddItem={(opts) =>
+              openCreateItem({
+                origin: "items",
+                categoryId: opts?.categoryId,
+              })
+            }
             openItemDetail={(id) => openItemDetail(id, "items")}
             initialSnapshot={itemsSnapshot}
             onSnapshotChange={setItemsSnapshot}
@@ -3599,6 +4272,8 @@ export default function App() {
             openItemDetail={(itemId, context) =>
               openItemDetail(itemId, "collections", context)
             }
+            openAddItem={(opts) => openCreateItem(opts)}
+            itemWriteBusy={itemWriteBusy || Boolean(itemFormSession)}
           />
         );
       case "history":        return <HistoryPage navigateToHistory={navigateToHistory}/>;
@@ -3607,6 +4282,7 @@ export default function App() {
       case "item-detail":
         return (
           <ItemDetailPage
+            key={`${itemDetailSelection?.itemId ?? "none"}-${itemDetailNonce}`}
             itemId={itemDetailSelection?.itemId ?? null}
             onBack={closeItemDetail}
             showToast={showToast}
@@ -3614,6 +4290,8 @@ export default function App() {
             collectionId={itemDetailSelection?.collectionId}
             collectionItemsPage={itemDetailSelection?.collectionItemsPage}
             onDeleteSuccess={handleItemDeleteSuccess}
+            onEdit={openEditItem}
+            writeBusy={itemWriteBusy || Boolean(itemFormSession)}
             backLabel={
               itemDetailSelection?.origin === "collections"
                 ? "Collection으로"
@@ -3628,16 +4306,25 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AppLayout currentPage={page} onNavigate={navigateFromLayout} onAddItem={openAddItem}>
+      <AppLayout currentPage={page} onNavigate={navigateFromLayout} onAddItem={() => openCreateItem()}>
         {renderPage()}
       </AppLayout>
 
-      {/* Global: Item Form Modal */}
-      {addItemOpen && (
+      {itemFormSession && (
         <ItemFormModal
-          editItem={editItemTarget || undefined}
-          onClose={() => { setAddItemOpen(false); setEditItemTarget(null); }}
-          onSave={() => {}}
+          key={
+            itemFormSession.mode === "edit"
+              ? `edit-${itemFormSession.item.id}`
+              : `create-${itemFormSession.origin}-${itemFormSession.lockedCollection?.id ?? "none"}`
+          }
+          session={itemFormSession}
+          busy={itemWriteBusy}
+          onBusyChange={setItemWriteBusy}
+          onClose={closeItemForm}
+          onCreated={handleItemCreated}
+          onUpdated={handleItemUpdated}
+          onItemMissing={handleEditItemMissing}
+          onLockedCollectionMissing={handleLockedCollectionMissing}
           showToast={showToast}
         />
       )}

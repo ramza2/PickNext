@@ -1,6 +1,6 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** 계약 검토용 분석안 — Item·Collection 삭제 Backend·Frontend 구현 및 D-8 안정화 완료 · Collection POST/PATCH Backend·Frontend 구현 완료 (C-1/C-2) · Item POST/PATCH Backend 구현 완료 (I-1)
+**상태:** 계약 검토용 분석안 — Collection·Item 기본 쓰기 Backend·Frontend 구현 완료 (C-1/C-2 · I-1/I-2) · 삭제 D-7/D-8 완료
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
@@ -10,8 +10,9 @@
 **C-1 구현:** 2026-07-22 — `POST`/`PATCH /api/v1/collections` (이름 Trim·Unique·no-op)
 **C-2 구현:** 2026-07-22 — Frontend Collection 생성·수정 Dialog·API Client·409 Inline
 **I-1 구현:** 2026-07-22 — `POST`/`PATCH /api/v1/items` (Validation·Lock·no-op·History Snapshot 불변)
-**범위:** Collection·Item 쓰기 계약 분석 + Item·Collection Hard Delete Backend·Frontend 삭제 연동 + Collection 생성·이름 수정 Backend·Frontend + Item 생성·수정 Backend
-**비범위:** Item POST/PATCH Frontend
+**I-2 구현:** 2026-07-23 — Frontend Item 생성·수정 Dialog·상태 버튼·PATCH Diff·origin 보존
+**범위:** Collection·Item 쓰기 Backend·Frontend + Hard Delete 연동
+**비범위:** Collection 상세 Item 「제거」 빠른 연결 해제 (I-3)
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -146,7 +147,19 @@ Index (현재):
 - 테스트: `tests/test_item_write_api.py` (36) · DELETE·Collection 회귀 포함
 - 격리 DB Smoke: `picknext_item_write_smoke` **16/16**
 - Backend 전체 **195 passed**
-- **잔여:** Item POST/PATCH Frontend
+- **잔여:** Collection 상세 Item 「제거」 (I-3)
+
+### 1.2.7 I-2 Item 생성·수정 Frontend 구현 결과 (2026-07-23)
+
+- API: `createItem` / `updateItem` · `ItemCreatePayload` / `ItemUpdatePayload`
+- UI: `ItemFormModal` (create/edit), Category·Collection Options 전체 로드, Rating 0.5 Select
+- PATCH Diff: 변경 필드만 전송 · `collection_id`/`progress_note`/`memo` 명시 null · 변경 없음 시 요청 생략
+- 생성 Context: home / items / collections(locked Collection)
+- 생성 후 Item 상세 진입 · 수정 후 상세 유지 · origin·Snapshot 보존
+- 상태 빠른 변경: Item 상세 기존 버튼 → `updateItem({ status })`
+- Collection 상세 「제거」: 미지원 Toast 유지 (I-3)
+- 검증: `verify-item-write-api.mjs` · `verify-item-write-flow.mjs` · tsc · build
+- **잔여:** Collection 상세 빠른 연결 해제
 
 ### 1.2.4 D-7 Frontend 구현 결과 (2026-07-22)
 
@@ -207,7 +220,7 @@ Migration 전제: Soft Delete 행 0건. 행이 발견되면 **자동 Hard Delete
 
 **D-7 완료 (2026-07-22):** Item·Collection Hard Delete — Confirm Dialog + `deleteItem`/`deleteCollection` API Client. origin별 복귀·재조회, Collection `item_count > 0` 사전 Toast, Backend 409 재조회. Collection 상세 Item 「제거」는 연결 해제 미구현 Toast 유지.
 
-**미연동:** Item POST/PATCH Frontend, 상태 전환 UI, Collection Item 「제거」, Bulk 삭제.
+**미연동:** Collection 상세 Item 「제거」, Bulk 삭제, History/추천 UI.
 
 Frontend DTO에 `deleted_at` **없음**. “복원” 문구는 **백업 Import RESTORE**용이며 Item Soft Delete 복원과 무관.
 

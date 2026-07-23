@@ -129,3 +129,75 @@ export function updateCollection(
     },
   );
 }
+
+export interface ItemCreatePayload {
+  title: string;
+  category_id: string;
+  collection_id?: string | null;
+  status?: "PLANNED" | "COMPLETED";
+  rating?: number;
+  progress_note?: string | null;
+  memo?: string | null;
+}
+
+export interface ItemUpdatePayload {
+  title?: string;
+  category_id?: string;
+  collection_id?: string | null;
+  status?: "PLANNED" | "COMPLETED";
+  rating?: number;
+  progress_note?: string | null;
+  memo?: string | null;
+}
+
+export function createItem(
+  payload: ItemCreatePayload,
+  signal?: AbortSignal,
+): Promise<ApiItemDetail> {
+  return apiRequest<ApiItemDetail>("/items", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function updateItem(
+  itemId: string,
+  payload: ItemUpdatePayload,
+  signal?: AbortSignal,
+): Promise<ApiItemDetail> {
+  return apiRequest<ApiItemDetail>(
+    `/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+}
+
+/** Load all collections for Item Form select (paginated API). */
+export async function getAllCollectionsForSelect(
+  signal?: AbortSignal,
+): Promise<ApiCollection[]> {
+  const pageSize = 100;
+  const first = await getCollections(
+    { page: 1, page_size: pageSize, sort: "name", order: "asc" },
+    signal,
+  );
+  const byId = new Map<string, ApiCollection>();
+  for (const row of first.collections) {
+    byId.set(row.id, row);
+  }
+  const totalPages = first.total_pages ?? 0;
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await getCollections(
+      { page, page_size: pageSize, sort: "name", order: "asc" },
+      signal,
+    );
+    for (const row of next.collections) {
+      byId.set(row.id, row);
+    }
+  }
+  return Array.from(byId.values());
+}

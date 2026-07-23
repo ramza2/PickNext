@@ -249,8 +249,8 @@ migration-report/repair/runs/
 
 - Category·Item CRUD API (Item Hard Delete는 D-3~D-5 완료)
 - Item Hard Delete 시 `legacy_import_items`는 `ON DELETE CASCADE`로 mapping 행이 제거된다. `legacy_import_runs`의 `imported_item_count` 등 통계는 과거 스냅샷이며 자동 감소하지 않는다.
-- `POST /api/v1/items`로 생성한 신규 Item에는 `legacy_import_items` Mapping을 만들지 않는다 (I-1).
-- Legacy Import로 생성된 Item을 `PATCH`해도 기존 Mapping·`source_id`·Import Run 통계는 유지한다. 원본 `legacy-data`는 변경하지 않는다.
+- `POST /api/v1/items`로 생성한 신규 Item에는 `legacy_import_items` Mapping을 만들지 않는다 (I-1). Frontend Item 생성 Dialog(I-2)도 동일하다.
+- Legacy Import로 생성된 Item을 `PATCH`·UI 수정해도 기존 Mapping·`source_id`·Import Run 통계는 유지한다. 원본 `legacy-data`는 변경하지 않는다.
 - 마지막 Item 삭제로 Collection이 자동 삭제되면 `legacy_import_collections` Mapping도 CASCADE 삭제된다.
 - 빈 Collection 직접 DELETE(D-6) 시에도 `legacy_import_collections` Mapping은 DB CASCADE로 삭제된다. Item 1건 이상으로 409면 Mapping·Import Run 통계는 유지된다.
 - Hard Delete 후 동일 SHA 성공 Import 재실행은 Unique로 차단될 수 있다. 재Import 정책은 별도 정의 필요.

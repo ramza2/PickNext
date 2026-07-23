@@ -1,8 +1,8 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · C-1 Collection POST/PATCH Backend 완료 · **C-2 Collection 생성·수정 Frontend 연동 완료 (2026-07-22)**
+> **상태:** Frontend D-7 삭제 연동 완료 · D-8 회귀·Smoke 검증 완료 · C-1/C-2 Collection 쓰기 완료 · I-1 Item POST/PATCH Backend 완료 · **I-2 Item 생성·수정 Frontend 연동 완료 (2026-07-23)**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (잔여):** Item Frontend 생성·수정, History/추천/TMDB, React Router, App.tsx Page 분리
+> **비범위 (잔여):** Collection 상세 Item 「제거」 빠른 연결 해제, History/추천/TMDB, React Router, App.tsx Page 분리
 
 ## 1. 실행·빌드 확인 결과
 
@@ -237,8 +237,19 @@ frontend/
 ### 다음 권장
 
 ```text
-Item Frontend 생성·수정 연동 (POST/PATCH Backend I-1 완료)
+I-3 Collection 상세 Item 「제거」 빠른 연결 해제 (PATCH collection_id=null)
 ```
+
+### Phase I-2 — Item 생성·수정 Frontend ✅ 완료 (2026-07-23)
+
+- `createItem` / `updateItem` API Client · `itemWriteMessages.ts`
+- `ItemFormModal` — Category·Collection Options, Status·Rating Select, progress_note/memo, Pending·404/409/422
+- 생성 Context: Home / Items(필터 Category 사전선택) / Collection 상세(Collection 고정)
+- 생성 성공 → Item 상세 진입 + origin 보존 / 수정 성공 → 상세 유지 + origin 보존
+- PATCH Diff(변경 필드만) · 명시적 null · 변경 없음 시 요청 생략
+- Item 상세 상태 버튼 PATCH 연동 · Collection 「제거」는 미지원 Toast 유지
+- `scripts/verify-item-write-api.mjs` · `verify-item-write-flow.mjs` · tsc · build 통과
+- **잔여:** Collection 상세 빠른 연결 해제(I-3)
 
 ### Phase I-1 — Item POST/PATCH Backend ✅ 완료 (2026-07-22)
 
@@ -248,7 +259,7 @@ Item Frontend 생성·수정 연동 (POST/PATCH Backend I-1 완료)
 - 추천 이력 Snapshot 불변, Legacy Mapping 유지(신규 POST는 Mapping 없음)
 - `tests/test_item_write_api.py` · 격리 DB Smoke `picknext_item_write_smoke` 16/16
 - Backend pytest **195 passed** (기존 159 + 신규 36)
-- **잔여:** Item Frontend 생성·수정 Dialog·상태 버튼·Collection Item 「제거」 연동
+- **I-2에서 Frontend 연동 완료** · Collection Item 「제거」는 I-3
 
 ### Phase C-1 — Collection POST/PATCH Backend ✅ 완료 (2026-07-22)
 
@@ -311,7 +322,8 @@ DELETE /api/v1/collections/{collection_id}
 | History / TMDB / Recommend | Mock |
 | React Router / Page 분리 | 미완료 |
 | Item POST/PATCH Backend | **I-1 완료** |
-| Item POST/PATCH·Frontend Item 생성·수정 | Frontend 미연동 |
+| Item POST/PATCH Frontend | **I-2 완료** |
+| Collection 상세 Item 「제거」 | 미구현 (I-3) |
 
 ## 9. 위험 요소
 
