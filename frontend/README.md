@@ -90,7 +90,7 @@ docker rm -f picknext-frontend-dpl1
 | Offline CRUD | **미지원** (오프라인 조회·쓰기·Background Sync·Push 없음) |
 | Dev | `npm run dev`에서 Service Worker **비활성** |
 | 운영 예정 | `https://picknext.ramza.duckdns.org/` |
-| 다음 단계 | **DPL-1A**에서 Nginx Manifest·SW Cache Header 조정 |
+| Nginx Header | **DPL-1A** — Manifest MIME·SW/아이콘 Cache 정책 적용 |
 
 아이콘 원본: `public/pwa-source.svg` (AppLayout Target 마크 + primary `#2563EB`)
 
@@ -99,12 +99,46 @@ cd frontend
 npm run generate-pwa-assets   # minimal-2023 → public/*.png · favicon.ico
 npm run build
 node scripts/verify-pwa-build.mjs
+node scripts/verify-pwa-nginx.mjs
 npm run preview -- --host 127.0.0.1 --port 4173
 ```
 
 업데이트 UX: 새 SW 대기 시 「새 버전이 있습니다」 → **업데이트**(`updateServiceWorker(true)`) / **나중에**(Prompt만 닫기). 강제 Reload·autoUpdate 없음.
 
 커스텀 설치 버튼(`beforeinstallprompt`)은 이번 범위가 아닙니다. Browser 기본 설치 UI를 사용합니다.
+
+## PWA Nginx Header (DPL-1A)
+
+운영 예정 주소: `https://picknext.ramza.duckdns.org/`
+
+| 경로 | MIME / Cache |
+| --- | --- |
+| `/manifest.webmanifest` | `application/manifest+json` · `no-cache, must-revalidate` |
+| `/sw.js` | JS · `no-store, no-cache, must-revalidate, max-age=0` |
+| `/registerSW.js` | 현재 Build에 없음 → Location 미추가 (생성 시 `no-cache` 권장) |
+| `/workbox-<hash>.js` | JS · `public, max-age=31536000, immutable` |
+| 고정 PWA 아이콘·favicon | image · `public, max-age=86400, must-revalidate` |
+| `/assets/<hash>.*` | `public, max-age=31536000, immutable` |
+| `/index.html` | `no-store, no-cache, must-revalidate` |
+| `/health` | `text/plain` · Cache 없음 |
+
+Docker Header Smoke:
+
+```bash
+# 저장소 루트
+docker build --build-arg VITE_API_BASE_URL=/api/v1 -t picknext-frontend:dpl1a ./frontend
+docker rm -f picknext-frontend-dpl1a 2>/dev/null || true
+docker run --rm -d --name picknext-frontend-dpl1a -p 127.0.0.1:5182:80 picknext-frontend:dpl1a
+
+curl -I http://127.0.0.1:5182/manifest.webmanifest
+curl -I http://127.0.0.1:5182/sw.js
+curl -I http://127.0.0.1:5182/workbox-98f7a950.js   # 실제 hash로 교체
+curl -I http://127.0.0.1:5182/pwa-192x192.png
+docker exec picknext-frontend-dpl1a nginx -t
+docker rm -f picknext-frontend-dpl1a
+```
+
+정적 설정 검사: `node scripts/verify-pwa-nginx.mjs` (HTTP Header의 최종 근거는 Docker curl).
 
 ## 환경변수 (`.env.example`)
 
@@ -206,6 +240,7 @@ node scripts/verify-item-write-flow.mjs
 node scripts/verify-collection-write-api.mjs
 node scripts/verify-delete-api.mjs
 node scripts/verify-pwa-build.mjs
+node scripts/verify-pwa-nginx.mjs
 npx tsc --noEmit
 npm run build
 ```
