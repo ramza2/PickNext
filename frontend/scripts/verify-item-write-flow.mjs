@@ -39,12 +39,16 @@ assert.match(app, /handleStatusToggle/);
 assert.match(app, /항목을 추가했습니다/);
 assert.match(app, /항목을 수정했습니다/);
 
-// Collection row "제거" must stay unsupported toast (no updateItem unlink shortcut).
-const removeIdx = app.indexOf("컬렉션에서 항목 제거 기능은 아직 지원하지 않습니다");
-assert.ok(removeIdx > 0, "remove toast missing");
-const removeWindow = app.slice(Math.max(0, removeIdx - 400), removeIdx + 200);
-assert.doesNotMatch(removeWindow, /updateItem\(/);
-assert.doesNotMatch(removeWindow, /deleteItem\(/);
+// Collection row "제거" = PATCH collection_id:null (not deleteItem).
+assert.match(app, /handleUnlinkConfirm/);
+assert.match(app, /컬렉션에서 항목 제거/);
+assert.doesNotMatch(app, /컬렉션에서 항목 제거 기능은 아직 지원하지 않습니다/);
+const unlinkIdx = app.indexOf("handleUnlinkConfirm");
+assert.ok(unlinkIdx > 0);
+const unlinkWindow = app.slice(unlinkIdx, unlinkIdx + 900);
+assert.match(unlinkWindow, /collection_id:\s*null/);
+assert.match(unlinkWindow, /updateItem\(/);
+assert.doesNotMatch(unlinkWindow, /deleteItem\(/);
 
 assert.match(app, /직접 추가/);
 assert.match(app, /완료 처리/);

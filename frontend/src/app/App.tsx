@@ -91,10 +91,15 @@ import {
   itemStatusSuccessToast,
   itemStatusUpdateFailureToast,
   itemStatusValidationToast,
+  itemUnlinkChangedToast,
+  itemUnlinkFailureToast,
+  itemUnlinkSuccessToast,
+  itemUnlinkValidationToast,
   itemUpdateFailureToast,
   isItemWriteNetworkOrServerError,
   normalizeNullableText,
   validateItemFormValues,
+  buildCollectionUnlinkConfirmBody,
   type ItemFormValues,
 } from "../api/itemWriteMessages";
 import { ApiError } from "../api/client";
@@ -212,8 +217,9 @@ function Toast({ msg }: { msg: string }) {
   );
 }
 
-function ConfirmModal({ title, body, danger, confirmLabel, pending, onConfirm, onClose, children }: {
+function ConfirmModal({ title, body, danger, confirmLabel, pending, pendingLabel, onConfirm, onClose, children }: {
   title: string; body: string; danger?: boolean; confirmLabel: string; pending?: boolean;
+  pendingLabel?: string;
   onConfirm: () => void; onClose: () => void; children?: ReactNode;
 }) {
   return (
@@ -227,7 +233,7 @@ function ConfirmModal({ title, body, danger, confirmLabel, pending, onConfirm, o
             className="flex-1 border border-border text-foreground py-2.5 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed">취소</button>
           <button onClick={onConfirm} disabled={pending}
             className={`flex-1 py-2.5 rounded-xl font-medium transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed ${danger?"bg-red-500 hover:bg-red-600 text-white":"bg-primary hover:bg-blue-700 text-white"}`}>
-            {pending ? "삭제 중..." : confirmLabel}
+            {pending ? (pendingLabel ?? "삭제 중...") : confirmLabel}
           </button>
         </div>
       </div>
@@ -3216,6 +3222,16 @@ function CollectionDetailInline({
   const [editPending, setEditPending] = useState(false);
   const [editValidationError, setEditValidationError] = useState<string | null>(null);
   const [editServerError, setEditServerError] = useState<string | null>(null);
+  const [unlinkTarget, setUnlinkTarget] = useState<{
+    itemId: string;
+    itemTitle: string;
+    isLastItem: boolean;
+  } | null>(null);
+  const [unlinkPending, setUnlinkPending] = useState(false);
+  const [quickAction, setQuickAction] = useState<{
+    itemId: string;
+    action: "unlink" | "status";
+  } | null>(null);
 
   const detailReady = Boolean(collection) && !detailError;
   const {
@@ -3247,6 +3263,103 @@ function CollectionDetailInline({
 
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
+  const collectionBusy =
+    Boolean(itemWriteBusy)
+    || deletePending
+    || editPending
+    || showDeleteConfirm
+    || showEditModal
+    || unlinkPending
+    || Boolean(unlinkTarget)
+    || Boolean(quickAction);
+
+  const reloadCollectionViews = useCallback(async () => {
+    await Promise.all([reloadDetail(), reloadItems()]);
+    onCollectionUpdated();
+  }, [onCollectionUpdated, reloadDetail, reloadItems]);
+
+  const openUnlinkConfirm = (item: { id: string; title: string }) => {
+    if (collectionBusy) return;
+    setUnlinkTarget({
+      itemId: item.id,
+      itemTitle: item.title,
+      isLastItem: total <= 1,
+    });
+  };
+
+  const handleUnlinkConfirm = async () => {
+    if (!unlinkTarget || unlinkPending) return;
+    setUnlinkPending(true);
+    setQuickAction({ itemId: unlinkTarget.itemId, action: "unlink" });
+    try {
+      const updated = await updateItem(unlinkTarget.itemId, {
+        collection_id: null,
+      });
+      if (updated.collection !== null) {
+        showToast(itemUnlinkFailureToast());
+        await reloadCollectionViews();
+        return;
+      }
+      setUnlinkTarget(null);
+      await reloadCollectionViews();
+      showToast(itemUnlinkSuccessToast());
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setUnlinkTarget(null);
+        try {
+          await getCollection(collectionId);
+          await reloadCollectionViews();
+        } catch (reloadErr) {
+          if (reloadErr instanceof ApiError && reloadErr.status === 404) {
+            onCollectionMissing();
+          } else {
+            await reloadCollectionViews();
+          }
+        }
+        showToast(ITEM_NOT_FOUND_TOAST);
+      } else if (err instanceof ApiError && err.status === 409) {
+        setUnlinkTarget(null);
+        await reloadCollectionViews();
+        showToast(itemUnlinkChangedToast());
+      } else if (err instanceof ApiError && err.status === 422) {
+        showToast(itemUnlinkValidationToast());
+      } else {
+        showToast(itemUnlinkFailureToast());
+      }
+    } finally {
+      setUnlinkPending(false);
+      setQuickAction(null);
+    }
+  };
+
+  const handleQuickStatusToggle = async (item: {
+    id: string;
+    status: ApiItemStatus;
+  }) => {
+    if (collectionBusy) return;
+    const nextStatus: ApiItemStatus =
+      item.status === "PLANNED" ? "COMPLETED" : "PLANNED";
+    setQuickAction({ itemId: item.id, action: "status" });
+    try {
+      await updateItem(item.id, { status: nextStatus });
+      await reloadCollectionViews();
+      showToast(itemStatusSuccessToast(nextStatus));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        await reloadCollectionViews();
+        showToast(ITEM_NOT_FOUND_TOAST);
+      } else if (err instanceof ApiError && err.status === 409) {
+        await reloadCollectionViews();
+        showToast(itemUnlinkChangedToast());
+      } else if (err instanceof ApiError && err.status === 422) {
+        showToast(itemStatusValidationToast());
+      } else {
+        showToast(itemStatusUpdateFailureToast());
+      }
+    } finally {
+      setQuickAction(null);
+    }
+  };
 
   const handleCollectionDeleteClick = () => {
     if (!detailVm) return;
@@ -3283,7 +3396,7 @@ function CollectionDetailInline({
   };
 
   const openEditModal = () => {
-    if (!detailVm || showDeleteConfirm) return;
+    if (!detailVm || showDeleteConfirm || collectionBusy) return;
     setEditName(detailVm.name);
     setEditPending(false);
     setEditValidationError(null);
@@ -3443,7 +3556,7 @@ function CollectionDetailInline({
             <button
               type="button"
               onClick={openEditModal}
-              disabled={showDeleteConfirm || deletePending}
+              disabled={collectionBusy}
               className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               title="수정"
             >
@@ -3452,7 +3565,8 @@ function CollectionDetailInline({
             <button
               type="button"
               onClick={handleCollectionDeleteClick}
-              className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors"
+              disabled={collectionBusy}
+              className="p-2 border border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
               title="삭제"
             >
               <Trash2 size={15}/>
@@ -3487,7 +3601,7 @@ function CollectionDetailInline({
           </button>
           <button
             type="button"
-            disabled={itemWriteBusy || showDeleteConfirm || deletePending || showEditModal || editPending}
+            disabled={collectionBusy}
             onClick={() => {
               if (!collection) return;
               openAddItem({
@@ -3583,19 +3697,28 @@ function CollectionDetailInline({
                   <div className="flex gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
-                      onClick={() => showToast("상태 변경 기능은 다음 단계에서 제공됩니다.")}
-                      className="text-[10px] border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors"
+                      disabled={collectionBusy}
+                      onClick={() => void handleQuickStatusToggle({
+                        id: item.id,
+                        status: item.status,
+                      })}
+                      className="text-[10px] border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      완료
+                      {quickAction?.itemId === item.id && quickAction.action === "status"
+                        ? "변경 중..."
+                        : item.status === "PLANNED"
+                          ? "완료"
+                          : "예정"}
                     </button>
                     <button
                       type="button"
-                      onClick={() =>
-                        showToast("컬렉션에서 항목 제거 기능은 아직 지원하지 않습니다.")
-                      }
-                      className="text-[10px] border border-border text-muted-foreground px-2 py-1 rounded-lg hover:bg-muted transition-colors"
+                      disabled={collectionBusy}
+                      onClick={() => openUnlinkConfirm({ id: item.id, title: item.title })}
+                      className="text-[10px] border border-border text-muted-foreground px-2 py-1 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      제거
+                      {quickAction?.itemId === item.id && quickAction.action === "unlink"
+                        ? "제거 중..."
+                        : "제거"}
                     </button>
                   </div>
                 </div>
@@ -3677,6 +3800,22 @@ function CollectionDetailInline({
           onConfirm={() => void handleCollectionDeleteConfirm()}
           onClose={() => {
             if (!deletePending) setShowDeleteConfirm(false);
+          }}
+        />
+      )}
+
+      {unlinkTarget && (
+        <ConfirmModal
+          title="컬렉션에서 항목 제거"
+          body={buildCollectionUnlinkConfirmBody(unlinkTarget.itemTitle, {
+            isLastItem: unlinkTarget.isLastItem,
+          })}
+          confirmLabel="제거"
+          pending={unlinkPending}
+          pendingLabel="제거 중..."
+          onConfirm={() => void handleUnlinkConfirm()}
+          onClose={() => {
+            if (!unlinkPending) setUnlinkTarget(null);
           }}
         />
       )}

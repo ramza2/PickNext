@@ -75,6 +75,38 @@ export function itemStatusSuccessToast(next: ApiItemStatus): string {
     : "볼 예정 상태로 변경했습니다.";
 }
 
+export function itemUnlinkSuccessToast(): string {
+  return "컬렉션에서 항목을 제거했습니다.";
+}
+
+export function itemUnlinkFailureToast(): string {
+  return "컬렉션에서 항목을 제거하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+export function itemUnlinkChangedToast(): string {
+  return "항목 정보가 변경되었습니다. 목록을 새로 불러왔습니다.";
+}
+
+export function itemUnlinkValidationToast(): string {
+  return "항목 정보가 올바르지 않습니다.";
+}
+
+export function buildCollectionUnlinkConfirmBody(
+  itemTitle: string,
+  options: { isLastItem: boolean },
+): string {
+  const lines = [
+    `“${itemTitle}” 항목을 이 컬렉션에서 제거할까요?`,
+    "",
+    "항목 자체는 삭제되지 않으며,",
+    "전체 항목 목록에서 계속 확인할 수 있습니다.",
+  ];
+  if (options.isLastItem) {
+    lines.push("", "이 항목을 제거하면 컬렉션은 빈 상태로 유지됩니다.");
+  }
+  return lines.join("\n");
+}
+
 export function isItemWriteNetworkOrServerError(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 0 || err.status >= 500);
 }
