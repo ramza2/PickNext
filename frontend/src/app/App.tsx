@@ -98,8 +98,10 @@ import {
   itemUpdateFailureToast,
   isItemWriteNetworkOrServerError,
   normalizeNullableText,
-  validateItemFormValues,
+  collectItemFormFieldErrors,
+  hasItemFormFieldErrors,
   buildCollectionUnlinkConfirmBody,
+  type ItemFormFieldErrors,
   type ItemFormValues,
 } from "../api/itemWriteMessages";
 import { ApiError } from "../api/client";
@@ -664,16 +666,22 @@ function ItemFormModal({
   const [collections, setCollections] = useState<ApiCollection[]>([]);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<ItemFormFieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const categorySectionRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLInputElement>(null);
+  const formErrorRef = useRef<HTMLParagraphElement>(null);
   const titleId = "item-form-modal-title";
-  const errorId = "item-form-modal-error";
+  const titleErrorId = "item-form-title-error";
+  const categoryErrorId = "item-form-category-error";
+  const progressErrorId = "item-form-progress-error";
+  const formErrorId = "item-form-modal-error";
   const formBusy = pending || busy;
 
   const progressLength = normalizeNullableText(values.progressNote)?.length ?? 0;
-  const inlineError = validationError ?? serverError;
+  const formLevelError = fieldErrors.form ?? serverError;
 
   const editHasChanges = useMemo(() => {
     if (session.mode !== "edit") return true;
@@ -745,8 +753,43 @@ function ItemFormModal({
     value: ItemFormValues[K],
   ) => {
     setValues((prev) => ({ ...prev, [key]: value }));
-    setValidationError(null);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (key === "title") delete next.title;
+      if (key === "categoryId") delete next.categoryId;
+      if (key === "progressNote") delete next.progressNote;
+      return next;
+    });
     if (serverError) setServerError(null);
+  };
+
+  const focusFirstFieldError = (errors: ItemFormFieldErrors) => {
+    window.requestAnimationFrame(() => {
+      if (errors.title) {
+        titleRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        titleRef.current?.focus();
+        return;
+      }
+      if (errors.categoryId) {
+        categorySectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+        const focusable = categorySectionRef.current?.querySelector<HTMLButtonElement>(
+          "button:not([disabled])",
+        );
+        focusable?.focus();
+        return;
+      }
+      if (errors.progressNote) {
+        progressRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        progressRef.current?.focus();
+        return;
+      }
+      if (errors.form) {
+        formErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -754,12 +797,13 @@ function ItemFormModal({
     if (formBusy) return;
 
     const categoriesEmpty = !optionsLoading && categories.length === 0;
-    const validationMessage = validateItemFormValues(values, {
+    const nextFieldErrors = collectItemFormFieldErrors(values, {
       categoriesEmpty,
     });
-    if (validationMessage) {
-      setValidationError(validationMessage);
+    if (hasItemFormFieldErrors(nextFieldErrors)) {
+      setFieldErrors(nextFieldErrors);
       setServerError(null);
+      focusFirstFieldError(nextFieldErrors);
       return;
     }
 
@@ -771,7 +815,7 @@ function ItemFormModal({
       }
       setPending(true);
       onBusyChange(true);
-      setValidationError(null);
+      setFieldErrors({});
       setServerError(null);
       try {
         const updated = await updateItem(session.item.id, payload);
@@ -830,7 +874,7 @@ function ItemFormModal({
     const payload = buildItemCreatePayload(values);
     setPending(true);
     onBusyChange(true);
-    setValidationError(null);
+    setFieldErrors({});
     setServerError(null);
     try {
       const created = await createItem(payload);
@@ -953,20 +997,31 @@ function ItemFormModal({
               onChange={(event) => updateField("title", event.target.value)}
               placeholder="제목을 입력하세요"
               disabled={formBusy}
-              aria-invalid={inlineError ? true : undefined}
-              aria-describedby={inlineError ? errorId : undefined}
+              aria-invalid={fieldErrors.title ? true : undefined}
+              aria-describedby={fieldErrors.title ? titleErrorId : undefined}
               className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
             />
+            {fieldErrors.title && (
+              <p id={titleErrorId} role="alert" className="text-xs text-red-600 break-words mt-1.5">
+                {fieldErrors.title}
+              </p>
+            )}
           </div>
 
-          <div>
-            <span className="block text-sm font-medium text-foreground mb-1.5">
+          <div ref={categorySectionRef}>
+            <span className="block text-sm font-medium text-foreground mb-1.5" id="item-form-category-label">
               Category <span className="text-red-500">*</span>
             </span>
             {optionsLoading ? (
               <p className="text-xs text-muted-foreground">카테고리 불러오는 중…</p>
             ) : (
-              <div className="grid grid-cols-2 gap-1.5">
+              <div
+                className="grid grid-cols-2 gap-1.5"
+                role="group"
+                aria-labelledby="item-form-category-label"
+                aria-invalid={fieldErrors.categoryId ? true : undefined}
+                aria-describedby={fieldErrors.categoryId ? categoryErrorId : undefined}
+              >
                 {categories.map((cat) => {
                   const presentation = getCategoryPresentation(cat.name);
                   const Icon = presentation.icon;
@@ -989,6 +1044,11 @@ function ItemFormModal({
                   );
                 })}
               </div>
+            )}
+            {fieldErrors.categoryId && (
+              <p id={categoryErrorId} role="alert" className="text-xs text-red-600 break-words mt-1.5">
+                {fieldErrors.categoryId}
+              </p>
             )}
           </div>
 
@@ -1069,15 +1129,31 @@ function ItemFormModal({
               진행 상황 <span className="text-muted-foreground font-normal text-xs">(선택)</span>
             </label>
             <input
+              ref={progressRef}
               id="item-form-progress"
               value={values.progressNote}
               disabled={formBusy}
               onChange={(event) => updateField("progressNote", event.target.value)}
               placeholder="예: 시즌 2 / 15권까지 읽음"
+              aria-invalid={fieldErrors.progressNote ? true : undefined}
+              aria-describedby={fieldErrors.progressNote ? progressErrorId : undefined}
               className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
             />
-            <div className="flex justify-end mt-1">
-              <span className="text-xs text-muted-foreground">{progressLength}/200</span>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 mt-1.5">
+              {fieldErrors.progressNote ? (
+                <p id={progressErrorId} role="alert" className="text-xs text-red-600 break-words">
+                  {fieldErrors.progressNote}
+                </p>
+              ) : (
+                <span className="hidden sm:block"/>
+              )}
+              <span
+                className={`text-xs flex-shrink-0 sm:ml-auto ${
+                  progressLength > 200 ? "text-red-600" : "text-muted-foreground"
+                }`}
+              >
+                {progressLength}/200
+              </span>
             </div>
           </div>
 
@@ -1095,11 +1171,18 @@ function ItemFormModal({
               className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 resize-y min-h-[5rem] disabled:opacity-50"
             />
           </div>
-
-          {inlineError && (
-            <p id={errorId} className="text-xs text-red-600 break-words">{inlineError}</p>
-          )}
         </div>
+
+        {formLevelError && (
+          <p
+            ref={formErrorRef}
+            id={formErrorId}
+            role="alert"
+            className="px-5 pt-2 text-xs text-red-600 break-words flex-shrink-0"
+          >
+            {formLevelError}
+          </p>
+        )}
 
         <div className="px-5 py-4 border-t border-border flex gap-3 flex-shrink-0">
           <button
@@ -2496,9 +2579,14 @@ function ItemsPage({
             onItemActivate(item.id);
           }
         }}>
-        <input type="checkbox" checked={selected.has(item.id)}
-          onClick={e => { e.stopPropagation(); toggleSelect(item.id); }}
-          className="w-3.5 h-3.5 flex-shrink-0 cursor-pointer accent-primary"/>
+        <input
+          type="checkbox"
+          checked={selected.has(item.id)}
+          onChange={() => toggleSelect(item.id)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`${item.title} 선택`}
+          className="w-3.5 h-3.5 flex-shrink-0 cursor-pointer accent-primary"
+        />
         <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
           style={{ backgroundColor: item.presentation.color }}>
           {item.title.charAt(0)}

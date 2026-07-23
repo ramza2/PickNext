@@ -54,4 +54,25 @@ assert.match(app, /직접 추가/);
 assert.match(app, /완료 처리/);
 assert.match(app, /볼 예정으로 변경/);
 
+// Items list checkbox must be controlled with onChange (not click-only).
+const cardCheckboxIdx = app.indexOf("checked={selected.has(item.id)}");
+assert.ok(cardCheckboxIdx > 0, "Items Card checkbox missing");
+const cardCheckboxWindow = app.slice(cardCheckboxIdx, cardCheckboxIdx + 280);
+assert.match(cardCheckboxWindow, /onChange=\{/);
+assert.doesNotMatch(cardCheckboxWindow, /onChange=\{\(\)\s*=>\s*\{\s*\}\}/);
+
+// Item Form field-level validation UX.
+assert.match(messages, /collectItemFormFieldErrors/);
+assert.match(messages, /hasItemFormFieldErrors/);
+assert.match(messages, /ItemFormFieldErrors/);
+assert.match(app, /collectItemFormFieldErrors/);
+assert.match(app, /fieldErrors\.title/);
+assert.match(app, /fieldErrors\.categoryId/);
+assert.match(app, /fieldErrors\.progressNote/);
+assert.match(app, /titleErrorId|item-form-title-error/);
+assert.match(app, /categoryErrorId|item-form-category-error/);
+assert.match(app, /progressErrorId|item-form-progress-error/);
+assert.match(app, /focusFirstFieldError/);
+assert.match(app, /role="alert"/);
+
 console.log("verify-item-write-flow: ok");

@@ -172,19 +172,54 @@ export function itemFormValuesFromDetail(item: ApiItemDetail): ItemFormValues {
   };
 }
 
-export function validateItemFormValues(
+export type ItemFormFieldErrors = {
+  title?: string;
+  categoryId?: string;
+  progressNote?: string;
+  form?: string;
+};
+
+export function collectItemFormFieldErrors(
   values: ItemFormValues,
   options?: { requireCategory?: boolean; categoriesEmpty?: boolean },
-): string | null {
-  if (options?.categoriesEmpty) return ITEM_CATEGORY_EMPTY_LIST_ERROR;
+): ItemFormFieldErrors {
+  const errors: ItemFormFieldErrors = {};
+  if (options?.categoriesEmpty) {
+    errors.form = ITEM_CATEGORY_EMPTY_LIST_ERROR;
+  }
   const titleError = validateItemTitle(normalizeItemTitleInput(values.title));
-  if (titleError) return titleError;
-  if (options?.requireCategory !== false && !values.categoryId) {
-    return ITEM_CATEGORY_REQUIRED_ERROR;
+  if (titleError) errors.title = titleError;
+  if (
+    !options?.categoriesEmpty
+    && options?.requireCategory !== false
+    && !values.categoryId
+  ) {
+    errors.categoryId = ITEM_CATEGORY_REQUIRED_ERROR;
   }
   const progressError = validateProgressNote(
     normalizeNullableText(values.progressNote),
   );
-  if (progressError) return progressError;
-  return null;
+  if (progressError) errors.progressNote = progressError;
+  return errors;
+}
+
+export function hasItemFormFieldErrors(errors: ItemFormFieldErrors): boolean {
+  return Boolean(
+    errors.title || errors.categoryId || errors.progressNote || errors.form,
+  );
+}
+
+/** @deprecated Prefer collectItemFormFieldErrors for field-level UX. */
+export function validateItemFormValues(
+  values: ItemFormValues,
+  options?: { requireCategory?: boolean; categoriesEmpty?: boolean },
+): string | null {
+  const errors = collectItemFormFieldErrors(values, options);
+  return (
+    errors.form
+    ?? errors.title
+    ?? errors.categoryId
+    ?? errors.progressNote
+    ?? null
+  );
 }
