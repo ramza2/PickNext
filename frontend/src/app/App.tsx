@@ -30,6 +30,7 @@ import {
   MOCK_FILE,
 } from "../mocks/data";
 import AppLayout from "./layout/AppLayout";
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { useHomeReadData } from "./hooks/useHomeReadData";
 import {
   useItemsReadData,
@@ -4558,6 +4559,7 @@ export default function App() {
 
       {/* Global toast */}
       {toast && <Toast msg={toast}/>}
+      <PwaUpdatePrompt />
     </div>
   );
 }

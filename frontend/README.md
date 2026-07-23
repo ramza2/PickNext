@@ -33,7 +33,81 @@ npm run dev
 프로덕션 빌드: `npm run build` → `dist/`  
 운영에서는 동일 Origin의 `/api/v1`을 기본으로 사용합니다.
 
+## 운영 Docker 이미지 (DPL-1)
+
+Multi-stage Build: Node에서 `npm ci` + `npm run build` → Nginx가 `dist` 정적 파일만 제공합니다.
+
+```bash
+# 저장소 루트
+docker build \
+  --build-arg VITE_API_BASE_URL=/api/v1 \
+  -t picknext-frontend:dpl1 \
+  ./frontend
+```
+
+| 항목 | 값 |
+| --- | --- |
+| Build ARG / ENV | `VITE_API_BASE_URL` (기본 `/api/v1`) |
+| Runtime | `nginx:1.28-alpine`, Port **80** |
+| Health | `GET /health` → `200` `text/plain` `ok` |
+| SPA | `try_files` → 없는 경로도 `index.html` |
+| Asset Cache | `/assets/*` 장기 Cache · `index.html` No-cache |
+| API Proxy | **없음** (Traefik이 `/`·`/api` 분기는 DPL-2·DPL-3) |
+
+Vite 변수는 **Build-time**에 Bundle에 삽입됩니다. Browser에 공개되는 값만 넣고, Secret·TMDB Token은 넣지 않습니다.
+
+단독 Container Smoke (Traefik·Compose Frontend 서비스 없이):
+
+```bash
+docker rm -f picknext-frontend-dpl1 2>/dev/null || true
+docker run --rm -d \
+  --name picknext-frontend-dpl1 \
+  -p 127.0.0.1:5180:80 \
+  picknext-frontend:dpl1
+
+curl -i http://127.0.0.1:5180/
+curl -i http://127.0.0.1:5180/health
+curl -i http://127.0.0.1:5180/items   # SPA fallback → index.html
+docker exec picknext-frontend-dpl1 nginx -t
+docker rm -f picknext-frontend-dpl1
+```
+
+이 단독 실행에서는 Backend 라우팅이 없어 API 요청은 실패할 수 있습니다. 정적 HTML·JS·CSS 로딩만 확인합니다.
+
+관련 파일: `frontend/Dockerfile`, `frontend/nginx.conf`, `frontend/.dockerignore`
+
+## PWA (PWA-1)
+
+설치 가능한 Web App Manifest + Service Worker(App Shell Precache) + 업데이트 안내 UX.
+
+| 정책 | 내용 |
+| --- | --- |
+| Manifest | `name`/`short_name` PickNext · `display: standalone` · `start_url`/`scope` `/` |
+| Theme | `theme_color` `#2563EB` · `background_color` `#F5F5F3` (앱 primary / background) |
+| SW | `vite-plugin-pwa` `generateSW` · `registerType: prompt` |
+| Precache | HTML·JS·CSS·아이콘 등 정적 Asset |
+| API | Cache 금지 · `/api`·`/health` Navigation Fallback 제외 · NetworkOnly |
+| Offline CRUD | **미지원** (오프라인 조회·쓰기·Background Sync·Push 없음) |
+| Dev | `npm run dev`에서 Service Worker **비활성** |
+| 운영 예정 | `https://picknext.ramza.duckdns.org/` |
+| 다음 단계 | **DPL-1A**에서 Nginx Manifest·SW Cache Header 조정 |
+
+아이콘 원본: `public/pwa-source.svg` (AppLayout Target 마크 + primary `#2563EB`)
+
+```bash
+cd frontend
+npm run generate-pwa-assets   # minimal-2023 → public/*.png · favicon.ico
+npm run build
+node scripts/verify-pwa-build.mjs
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+업데이트 UX: 새 SW 대기 시 「새 버전이 있습니다」 → **업데이트**(`updateServiceWorker(true)`) / **나중에**(Prompt만 닫기). 강제 Reload·autoUpdate 없음.
+
+커스텀 설치 버튼(`beforeinstallprompt`)은 이번 범위가 아닙니다. Browser 기본 설치 UI를 사용합니다.
+
 ## 환경변수 (`.env.example`)
+
 
 ```env
 VITE_API_BASE_URL=/api/v1
@@ -131,6 +205,7 @@ node scripts/verify-item-write-api.mjs
 node scripts/verify-item-write-flow.mjs
 node scripts/verify-collection-write-api.mjs
 node scripts/verify-delete-api.mjs
+node scripts/verify-pwa-build.mjs
 npx tsc --noEmit
 npm run build
 ```
