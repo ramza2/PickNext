@@ -1,6 +1,6 @@
 # 09. Collection·Item 쓰기 API 계약 사전 분석
 
-**상태:** Collection·Item 기본 쓰기 Backend·Frontend 및 최종 회귀 완료 (C-1/C-2 · I-1/I-2/I-3 · D-7/D-8)
+**상태:** RC-1 API·격리 DB 기본 쓰기 Release Candidate 검증 완료 · 브라우저 수동 QA 대기 · PASS WITH NOTES
 **작성 기준일:** 2026-07-22  
 **삭제 정책 갱신:** 2026-07-22 (Item Soft Delete → Hard Delete)  
 **D-2 구현:** 2026-07-22 — `0004_remove_item_soft_delete` 적용, Model·Read Query Soft Delete 제거  
@@ -12,8 +12,9 @@
 **I-1 구현:** 2026-07-22 — `POST`/`PATCH /api/v1/items` (Validation·Lock·no-op·History Snapshot 불변)
 **I-2 구현:** 2026-07-23 — Frontend Item 생성·수정 Dialog·상태 버튼·PATCH Diff·origin 보존
 **I-3 구현:** 2026-07-23 — Collection 상세 Item 빠른 연결 해제·상태 변경 · 쓰기 최종 회귀
+**RC-1 검증:** 2026-07-23 — API·격리 DB Write Smoke · 자동 회귀 · Seed 비파괴 · **브라우저 수동 QA 대기**
 **범위:** Collection·Item 쓰기 Backend·Frontend + Hard Delete 연동
-**비범위:** Bulk Delete, Drag & Drop, Category CRUD, RecommendationHistory UI, TMDB, 인증
+**비범위:** Bulk Delete, Drag & Drop, Category CRUD, RecommendationHistory UI, TMDB, 인증, 자동화 Browser E2E, Desktop/Mobile 실브라우저 QA
 **연계:** `docs/10-item-hard-delete-migration-analysis.md`
 
 ---
@@ -171,7 +172,26 @@ Index (현재):
 - Seed 비파괴 확인
 - **잔여:** Bulk Delete, Drag & Drop, Category CRUD, History UI, TMDB, 인증, 자동화 Browser E2E
 
-### 1.2.4 D-7 Frontend 구현 결과 (2026-07-22)
+### 1.2.9 RC-1 API·격리 DB Release Candidate 검증 (2026-07-23)
+
+```text
+브라우저 수동 QA: 미수행 / 대기
+API·격리 DB Release Candidate 검증: 통과
+최종 판정: PASS WITH NOTES
+```
+
+- 격리 DB: `picknext_write_rc` · Fixture(영화/드라마/도서 · RC Empty/Single/Multi/Rename · Standalone · History · Legacy · 타 사용자)
+- API Smoke: `backend/scripts/rc1_write_rc_smoke.py` **40/40**
+  - Collection POST/409/PATCH/DELETE(빈·비어있지 않음)
+  - Item POST/PATCH Diff·연결·이동·Form unlink
+  - 빠른 unlink · **마지막 Item unlink → Collection 유지**
+  - 빠른 status · **마지막 Item DELETE → Collection 404** · 204 body 길이 0
+  - History Snapshot 불변 · Legacy Mapping 유지 · 타 사용자 404
+- 자동 회귀: Backend **196 passed** · Frontend verify · tsc · build
+- Seed: 7202 / 249 / 10 / 4708 / 2494 / linked 845 전후 동일
+- **브라우저 수동 QA 대기:** Dialog·Toast·Pending·origin·Network·Console·Desktop·Mobile 미검증 (TestClient로 대체 불가)
+- **판정: PASS WITH NOTES**
+- **잔여:** 실브라우저 UX QA, Bulk Delete, Drag & Drop, Category CRUD, History UI, TMDB, 인증, Collection Options 249건 실측 요청 수
 
 - API: `frontend/src/api/catalog.ts` — `deleteItem`, `deleteCollection` (204 → `undefined`)
 - 오류 문구: `frontend/src/api/deleteMessages.ts`
