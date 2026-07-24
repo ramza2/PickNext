@@ -1,0 +1,48 @@
+# Traefik / DPL-3 production overlay
+# Usage (remote Ubuntu — do NOT combine with compose.local.yaml):
+#   docker compose -p picknext-dpl3 -f compose.yaml -f compose.traefik.yaml up -d
+#
+# Requires external Docker network `proxy` (owned by Traefik).
+# Host: ${PICKNEXT_HOST:-picknext.ramza.duckdns.org}
+# No StripPrefix — Backend already serves /api/v1/*.
+
+services:
+  postgres:
+    # Production: no host port publish (override base compose ports).
+    ports: !override []
+
+  backend:
+    ports: !override []
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.picknext-api.rule=Host(`${PICKNEXT_HOST:-picknext.ramza.duckdns.org}`) && (Path(`/api`) || PathPrefix(`/api/`))"
+      - "traefik.http.routers.picknext-api.entrypoints=websecure"
+      - "traefik.http.routers.picknext-api.priority=100"
+      - "traefik.http.routers.picknext-api.tls=true"
+      - "traefik.http.routers.picknext-api.tls.certresolver=myresolver"
+      - "traefik.http.routers.picknext-api.service=picknext-api-service"
+      - "traefik.http.services.picknext-api-service.loadbalancer.server.port=8000"
+
+  frontend:
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.picknext-web.rule=Host(`${PICKNEXT_HOST:-picknext.ramza.duckdns.org}`)"
+      - "traefik.http.routers.picknext-web.entrypoints=websecure"
+      - "traefik.http.routers.picknext-web.priority=10"
+      - "traefik.http.routers.picknext-web.tls=true"
+      - "traefik.http.routers.picknext-web.tls.certresolver=myresolver"
+      - "traefik.http.routers.picknext-web.service=picknext-web-service"
+      - "traefik.http.services.picknext-web-service.loadbalancer.server.port=80"
+
+networks:
+  proxy:
+    external: true
+    name: proxy

@@ -76,6 +76,10 @@ docker rm -f picknext-frontend-dpl1
 
 관련 파일: `frontend/Dockerfile`, `frontend/nginx.conf`, `frontend/.dockerignore`
 
+Compose 통합(DPL-2): Root `compose.yaml`의 `frontend` 서비스 + `compose.local.yaml` Loopback(`127.0.0.1:5183`).
+동일 Origin API는 Traefik Overlay `compose.traefik.yaml`(DPL-3)이며 Frontend Nginx는 `/api`를 Proxy하지 않습니다.
+Production: `compose.yaml` + `compose.traefik.yaml` (local Overlay와 동시 사용 금지). 상세는 Root `README.md`.
+
 ## PWA (PWA-1)
 
 설치 가능한 Web App Manifest + Service Worker(App Shell Precache) + 업데이트 안내 UX.

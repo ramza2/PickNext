@@ -1,0 +1,19 @@
+# Local / DPL-2 override — Loopback host ports only.
+# Usage:
+#   docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml up -d
+#
+# Named volume `postgres_data` is project-scoped (e.g. picknext-dpl2_postgres_data).
+# Host ports avoid clashing with Seed/RC and other local stacks.
+
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:${DPL2_POSTGRES_PUBLISH_PORT:-15432}:5432"
+
+  backend:
+    ports: !override
+      - "127.0.0.1:${DPL2_BACKEND_PORT:-8012}:8000"
+
+  frontend:
+    ports:
+      - "127.0.0.1:${PICKNEXT_FRONTEND_PORT:-5183}:80"

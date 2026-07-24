@@ -16,7 +16,7 @@
 - pytest
 - Docker Compose
 
-패키지 관리는 `backend/pyproject.toml` 하나로 통일합니다. Frontend(React + TypeScript + Vite)와 Traefik은 이후 단계에서 추가합니다.
+패키지 관리는 `backend/pyproject.toml` 하나로 통일합니다. Frontend는 Compose의 Nginx 정적 서비스로 포함되며, Traefik 동일 Origin Routing은 DPL-3에서 연결합니다.
 
 ## 디렉터리 구조
 
@@ -43,6 +43,8 @@ PickNext/
 ├─ infra/
 ├─ docs/
 ├─ compose.yaml
+├─ compose.local.yaml   # Local/DPL-2 Loopback Port Override
+├─ compose.traefik.yaml # DPL-3 Traefik Overlay (proxy network)
 ├─ .env.example
 └─ README.md
 ```
@@ -61,6 +63,89 @@ Health: http://localhost:${BACKEND_PORT:-8000}/api/v1/health
 OpenAPI: http://localhost:${BACKEND_PORT:-8000}/docs
 
 로컬에 PostgreSQL 등이 이미 `5432`/`8000`을 사용 중이면 `.env`의 `POSTGRES_PUBLISH_PORT`, `BACKEND_PORT`를 빈 포트로 변경하세요.
+
+### Frontend Compose (DPL-2)
+
+Base `compose.yaml`의 `frontend`는 DPL-1 Nginx 이미지를 Build하며 **Host Port를 열지 않습니다.**
+로컬·격리 Smoke는 `compose.local.yaml`로 Loopback만 노출합니다.
+
+| 항목 | 값 |
+| --- | --- |
+| Build | `./frontend` Dockerfile · `VITE_API_BASE_URL` 기본 `/api/v1` |
+| Container Port | 80 |
+| Health | `GET /health` → `ok` |
+| Local URL | http://127.0.0.1:5183/ |
+| API Proxy | **없음** (동일 Origin `/api`는 **DPL-3 Traefik**) |
+| 운영 예정 | https://picknext.ramza.duckdns.org/ |
+
+DPL-2 격리 Project (`picknext-dpl2`, 전용 Named Volume `picknext-dpl2_postgres_data`):
+
+```bash
+# 설정 검증
+node scripts/verify-docker-compose.mjs
+docker compose -f compose.yaml -f compose.local.yaml config --quiet
+
+# Build · 기동 (기존 Seed/RC Volume 미사용)
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml down --remove-orphans
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml build frontend
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml up -d
+
+# Migration · Seed (격리 DB에만)
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml exec backend alembic upgrade head
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml exec backend python -m app.services.seed
+
+# Smoke
+curl -i http://127.0.0.1:5183/health
+curl -i http://127.0.0.1:8012/api/v1/health
+
+# 종료 (−v 금지: Seed/운영 Volume 보호)
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml down --remove-orphans
+```
+
+Local Override 기본 Host Port (모두 `127.0.0.1`):
+
+| 서비스 | 기본 Port |
+| --- | --- |
+| Frontend | `${PICKNEXT_FRONTEND_PORT:-5183}` |
+| Backend | `${DPL2_BACKEND_PORT:-8012}` |
+| PostgreSQL | `${DPL2_POSTGRES_PUBLISH_PORT:-15432}` |
+
+`VITE_*`는 Browser Bundle에 포함됩니다. Secret·DB 비밀번호·Token을 넣지 마세요.
+
+### Traefik Compose (DPL-3)
+
+개발 PC는 Windows(Cursor), 배포 서버는 Ubuntu(`ramza@ramza.iptime.org`)입니다. SSH 비밀번호는 문서·`.env`·Script에 기록하지 않습니다.
+
+| 항목 | 값 |
+| --- | --- |
+| Overlay | `compose.traefik.yaml` |
+| External Network | `proxy` (Traefik가 소유 — PickNext가 생성하지 않음) |
+| Public Host | `${PICKNEXT_HOST:-picknext.ramza.duckdns.org}` |
+| Frontend Router | Host catch-all → `frontend:80` · priority 10 |
+| Backend Router | `Path(/api)` · `PathPrefix(/api/)` → `backend:8000` · priority 100 |
+| EntryPoint | `websecure` · TLS · certresolver `myresolver` |
+| PostgreSQL | `default` only · proxy·Traefik Label·Host Port 없음 |
+| StripPrefix | **없음** (Backend가 `/api/v1`을 그대로 수신) |
+
+Production 실행 (원격):
+
+```bash
+# compose.local.yaml과 동시 사용 금지
+docker compose --env-file .env.dpl3 -p picknext-dpl3 \
+  -f compose.yaml -f compose.traefik.yaml config --quiet
+docker compose --env-file .env.dpl3 -p picknext-dpl3 \
+  -f compose.yaml -f compose.traefik.yaml up -d
+```
+
+Local 실행: `compose.yaml` + `compose.traefik.yaml`이 아니라 `compose.yaml` + `compose.local.yaml`만 사용합니다.
+
+로컬 검증:
+
+```bash
+node scripts/verify-docker-compose.mjs
+node scripts/verify-traefik-compose.mjs
+docker compose -f compose.yaml -f compose.traefik.yaml config --quiet
+```
 
 종료:
 
@@ -269,7 +354,7 @@ pytest -q
 - Category/Item/Collection 쓰기 API
 - 랜덤 추천·선택·이력 API
 - TMDB API 실제 연동 (기획 문서만 반영)
-- Traefik / 서버 배포
+- Traefik Overlay / 동일 Origin Routing (DPL-3)
 
 ## 다음 개발 단계
 
@@ -277,7 +362,7 @@ pytest -q
 2. Category·Item·Collection CRUD API
 3. 랜덤 추천 및 `이걸로 선택` 이력 API
 4. TMDB Migration·검색·등록 Backend
-5. Traefik 및 운영 배포 설정
+5. Traefik ACME·공인 DNS 확정 (DPL-4) 및 운영 배포
 
 설계 문서는 `docs/`를 참고하세요.
 
