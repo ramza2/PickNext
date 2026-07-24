@@ -376,30 +376,28 @@ pytest -q
 ## 현재 구현 범위
 
 - Monorepo 골격 + Figma Make Frontend 기준선
-- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0003`)
+- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0005`)
 - 개발용 Seed (멱등), Health Check API
-- Docker Compose (`backend`, `postgres`)
+- Docker Compose (`backend`, `postgres`, `frontend`)
 - Legacy Dry-run / Import / 보정 CLI
-- **Category·Item 읽기 API** (`GET /summary`, `/categories`, `/items`, `/items/{id}`)
-- Frontend Phase B-1 구조 준비 (Proxy·API Client·Mock/Layout 분리)
-- Frontend Home·Item 목록·Item 상세 읽기 API 연동 완료
+- Category·Item·Collection 읽기·쓰기 API
+- TMDB: `GET /tmdb/status|search|details/...`, `POST /items/from-tmdb`
+- Frontend Home·Items·Collections·Item Detail·TMDB Search 실연동
 
 ## 이번 범위에서 제외
 
-- Collection 읽기 API·Frontend 연동
-- Frontend Item 쓰기 API 연동
 - 인증·로그인
-- Category/Item/Collection 쓰기 API
-- 랜덤 추천·선택·이력 API
-- TMDB API 실제 연동 (Backend TMDB-1: Status·Search·Details 완료 / Frontend·등록은 TMDB-2)
-- Traefik Overlay / 동일 Origin Routing (DPL-3)
+- Category 쓰기 CRUD UI
+- 랜덤 추천·선택·이력 API/UI
+- Legacy TMDB 자동 매칭·Backfill
+- Traefik ACME·공인 DNS 확정 (DPL-4)
 
 ## 다음 개발 단계
 
 1. Collection 목록·상세 읽기 API 계약 및 Backend 구현
 2. Category·Item·Collection CRUD API
 3. 랜덤 추천 및 `이걸로 선택` 이력 API
-4. TMDB Migration·검색·등록 Backend
+4. TMDB Legacy 자동 매칭·Backfill (선택)
 5. Traefik ACME·공인 DNS 확정 (DPL-4) 및 운영 배포
 
 설계 문서는 `docs/`를 참고하세요.

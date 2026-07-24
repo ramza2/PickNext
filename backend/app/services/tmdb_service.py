@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.integrations.tmdb.client import TmdbClient
 from app.integrations.tmdb.errors import TmdbError, TmdbNotConfiguredError
 from app.models import Item, User
+from app.schemas import ItemFromTmdbCreate
 from app.schemas.tmdb import (
     TmdbCastMember,
     TmdbCrewMember,
@@ -24,6 +25,7 @@ from app.schemas.tmdb import (
     TmdbSearchResultItem,
     TmdbStatusResponse,
 )
+from app.services import catalog
 
 EXTERNAL_SOURCE_TMDB = "tmdb"
 CAST_LIMIT = 10
@@ -561,4 +563,75 @@ class TmdbService:
             external_ids=self._map_external_ids(external_ids_raw),
             registered=reg_id is not None,
             registered_item_id=reg_id,
+        )
+
+    def _trusted_item_fields_from_detail(
+        self,
+        *,
+        media_type: str,
+        raw: dict[str, Any],
+    ) -> dict[str, str | None]:
+        if media_type == "movie":
+            title = raw.get("title")
+            original_title = raw.get("original_title")
+        else:
+            title = raw.get("name")
+            original_title = raw.get("original_name")
+
+        if not isinstance(title, str) or not title.strip():
+            title = original_title if isinstance(original_title, str) else None
+        if not isinstance(title, str) or not title.strip():
+            title = "Untitled"
+
+        original_title_norm: str | None = None
+        if isinstance(original_title, str) and original_title.strip():
+            original_title_norm = original_title.strip()
+
+        original_language = raw.get("original_language")
+        if not isinstance(original_language, str) or not original_language.strip():
+            original_language = None
+        else:
+            original_language = original_language.strip()
+
+        poster_path = raw.get("poster_path") if isinstance(raw.get("poster_path"), str) else None
+        backdrop_path = (
+            raw.get("backdrop_path") if isinstance(raw.get("backdrop_path"), str) else None
+        )
+
+        return {
+            "title": title.strip(),
+            "original_title": original_title_norm,
+            "original_language": original_language,
+            "poster_path": poster_path,
+            "backdrop_path": backdrop_path,
+        }
+
+    async def create_item_from_tmdb(
+        self,
+        *,
+        db: Session,
+        user: User,
+        payload: ItemFromTmdbCreate,
+    ) -> dict[str, Any]:
+        if self._client.auth_mode == "none":
+            raise TmdbNotConfiguredError()
+
+        if payload.media_type == "movie":
+            raw = await self._client.movie_details(payload.tmdb_id)
+        else:
+            raw = await self._client.tv_details(payload.tmdb_id)
+
+        trusted = self._trusted_item_fields_from_detail(
+            media_type=payload.media_type,
+            raw=raw,
+        )
+        return catalog.create_item_from_tmdb(
+            db,
+            user,
+            payload,
+            trusted_title=trusted["title"] or "Untitled",
+            original_title=trusted["original_title"],
+            original_language=trusted["original_language"],
+            poster_path=trusted["poster_path"],
+            backdrop_path=trusted["backdrop_path"],
         )

@@ -1,23 +1,24 @@
 # 05. TMDB Integration Plan
 
-> **상태:** TMDB-1 Backend 기반 구현 완료 (검색·상세·Status·외부 식별 모델). TMDB-2(Frontend 연동·`from-tmdb` 등록)는 후속.  
-> **범위:** TMDB 기반 영화·TV 검색·상세 및 `PLANNED` Item 등록  
-> **비범위 (TMDB-1):** Frontend 실검색 연결, `POST /items/from-tmdb`, 운영·로컬 실데이터 DB Migration 적용, Legacy 7,202건 자동 매칭
+> **상태:** TMDB-1 Backend 기반 + **TMDB-2 Frontend 실검색·상세·`POST /items/from-tmdb` 등록** 완료.  
+> **범위:** TMDB 기반 영화·TV 검색·상세 및 Item 등록  
+> **비범위 (잔여):** Legacy 7,202건 자동 매칭·Backfill, Trailer/Watch Provider, 추천 History 연동
 
 ## 0. TMDB-1 / TMDB-2 범위 구분
 
 | 단계 | 포함 | 제외 |
 | --- | --- | --- |
-| **TMDB-1 (완료)** | Settings·Secret 안전 처리, Async TMDB Client, Status/Search/Details API, 응답 정규화, Image URL, Item 외부 식별 컬럼·Partial Unique Index, Migration `0005`, Mock 테스트 | Frontend 검색 UI 연결, Item 등록 API, 운영 DB migrate, Backfill |
-| **TMDB-2 (후속)** | Frontend 검색·상세, `POST /items/from-tmdb` (또는 동등), 등록 UX·중복 409 | Legacy 자동 매칭 |
+| **TMDB-1 (완료)** | Settings·Secret 안전 처리, Async TMDB Client, Status/Search/Details API, 응답 정규화, Image URL, Item 외부 식별 컬럼·Partial Unique Index, Migration `0005`, Mock 테스트 | Frontend 검색 UI 연결, Item 등록 API (당시), Legacy Backfill |
+| **TMDB-2 (완료)** | Frontend 검색·상세·등록 UI, `POST /items/from-tmdb`, 서버 TMDB Detail 재조회, 중복 409(`TMDB_ITEM_ALREADY_EXISTS`) | Legacy 자동 매칭 |
 
-### TMDB-1 구현 API
+### 구현 API
 
 | Method | Path | 설명 |
 | --- | --- | --- |
 | `GET` | `/api/v1/tmdb/status` | 설정·연결 상태 (`AVAILABLE` / `NOT_CONFIGURED` / `UNAVAILABLE`), Secret 미노출 |
 | `GET` | `/api/v1/tmdb/search` | `query`, `media_type=all\|movie\|tv`, `page` — movie/tv만, person 제외 |
 | `GET` | `/api/v1/tmdb/details/{media_type}/{tmdb_id}` | movie\|tv 상세 + credits·external_ids |
+| `POST` | `/api/v1/items/from-tmdb` | TMDB Detail 재조회 후 Item 생성 (201) / 중복 409 |
 
 ### 인증·정책 (확정)
 
@@ -291,11 +292,20 @@ TMDB Movie·TV 유형을 PickNext Category에 1:1로 매핑하지 않는다.
 
 검색·상세 응답은 PickNext DTO이며 `registered` / `registered_item_id`를 포함한다. Image URL은 `/configuration` 기반(캐시)으로 Backend가 조합한다.
 
-### 9.2 등록 — TMDB-2
+### 9.2 등록 — TMDB-2 (완료)
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| `POST` | `/items/from-tmdb` | TMDB 메타 기반 `PLANNED` Item 생성 (미구현) |
+| `POST` | `/items/from-tmdb` | 서버가 TMDB Detail을 재조회한 뒤 Item 생성. 클라이언트 `external_*` 위조 무시 (`extra=forbid`) |
+
+**요청 (`ItemFromTmdbCreate`):** `media_type`, `tmdb_id`, `category_id` 필수. 선택: `title`(override), `collection_id`, `status`, `rating`, `progress_note`, `memo`.
+
+**정책:**
+- 제목: Form override 가능. 미전달 시 TMDB `ko-KR` title/name
+- 저장 필드: `external_source=tmdb`, `external_id`, `external_media_type`, `original_*`, `poster_path`, `backdrop_path`, `external_metadata_updated_at` (overview/release_date DB 컬럼 없음)
+- 중복: `409` + `detail: { code: "TMDB_ITEM_ALREADY_EXISTS", existing_item_id }` (pre-check + Unique race)
+- 신규 Migration 없음 (`0005` 사용)
+
 ### 9.3 응답 모델 (안)
 
 **검색 결과 항목 (`TmdbSearchResultItem`):**
@@ -450,15 +460,13 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 - 추천 후보 쿼리(존재 Item 전체)에 TMDB Item 포함 정상
 - Import·보정 CLI 무변경
 
-## 15. TMDB-1에서 수행하지 않은 것
+## 15. TMDB-2 이후 잔여
 
-- Frontend 검색·상세 실연동
-- `POST /items/from-tmdb` (및 동등 등록 API)
-- 로컬 실데이터 DB·DPL-3에 Migration 적용
 - Legacy 데이터 TMDB 자동 매칭·Backfill
 - 기존 7,202 Item 수정
 - 검색·상세 결과 Cache / Redis
 - Trailer·Watch Provider·추천 History
+- 실데이터 DB에 대한 등록 Live Smoke (테스트는 MockTransport·격리 Fixture만)
 
 ## 16. 관련 문서
 

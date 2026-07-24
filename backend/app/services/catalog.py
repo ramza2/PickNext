@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -26,7 +27,10 @@ from app.models import (
 )
 
 if TYPE_CHECKING:
-    from app.schemas import ItemCreate, ItemUpdate
+    from app.schemas import ItemCreate, ItemFromTmdbCreate, ItemUpdate
+
+EXTERNAL_SOURCE_TMDB = "tmdb"
+TMDB_ITEM_ALREADY_EXISTS = "TMDB_ITEM_ALREADY_EXISTS"
 
 
 class ItemSort(str, Enum):
@@ -305,23 +309,63 @@ def _item_field_values_equal(field: str, current: Any, new: Any) -> bool:
 
 def _is_known_item_write_integrity_error(exc: IntegrityError) -> bool:
     orig = getattr(exc, "orig", None)
+    known = {
+        "items_category_id_fkey",
+        "items_collection_id_fkey",
+    }
     if orig is not None:
         constraint = getattr(orig, "constraint_name", None)
-        if constraint in {
-            "items_category_id_fkey",
-            "items_collection_id_fkey",
-        }:
+        if constraint in known:
             return True
         diag = getattr(orig, "diag", None)
         if diag is not None:
             diag_constraint = getattr(diag, "constraint_name", None)
-            if diag_constraint in {
-                "items_category_id_fkey",
-                "items_collection_id_fkey",
-            }:
+            if diag_constraint in known:
                 return True
     message = str(exc)
     return "items_category_id_fkey" in message or "items_collection_id_fkey" in message
+
+
+def _is_external_identity_unique_violation(exc: IntegrityError) -> bool:
+    name = "uq_items_user_external_identity"
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        constraint = getattr(orig, "constraint_name", None)
+        if constraint == name:
+            return True
+        diag = getattr(orig, "diag", None)
+        if diag is not None:
+            diag_constraint = getattr(diag, "constraint_name", None)
+            if diag_constraint == name:
+                return True
+    return name in str(exc)
+
+
+def find_item_by_tmdb_identity(
+    db: Session,
+    user_id: UUID,
+    *,
+    media_type: str,
+    tmdb_id: int,
+) -> Item | None:
+    return db.scalar(
+        select(Item).where(
+            Item.user_id == user_id,
+            Item.external_source == EXTERNAL_SOURCE_TMDB,
+            Item.external_media_type == media_type,
+            Item.external_id == str(tmdb_id),
+        )
+    )
+
+
+def _raise_tmdb_item_already_exists(existing_item_id: UUID) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": TMDB_ITEM_ALREADY_EXISTS,
+            "existing_item_id": str(existing_item_id),
+        },
+    )
 
 
 def create_item(
@@ -365,6 +409,101 @@ def create_item(
     except IntegrityError as exc:
         if commit:
             db.rollback()
+        if _is_known_item_write_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Related resource changed",
+            ) from exc
+        raise
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
+def create_item_from_tmdb(
+    db: Session,
+    user: User,
+    payload: ItemFromTmdbCreate,
+    *,
+    trusted_title: str,
+    original_title: str | None,
+    original_language: str | None,
+    poster_path: str | None,
+    backdrop_path: str | None,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Create an item with server-trusted TMDB external identity fields.
+
+    Callers must re-fetch TMDB detail and pass metadata here; client-supplied
+    external fields are never accepted on the request schema.
+    """
+    existing = find_item_by_tmdb_identity(
+        db,
+        user.id,
+        media_type=payload.media_type,
+        tmdb_id=payload.tmdb_id,
+    )
+    if existing is not None:
+        _raise_tmdb_item_already_exists(existing.id)
+
+    if _get_owned_category(db, user.id, payload.category_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
+
+    if payload.collection_id is not None:
+        _lock_owned_collections_ordered(db, user.id, {payload.collection_id})
+
+    title = payload.title if payload.title is not None else trusted_title
+    if not title or not title.strip():
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="TMDB_UPSTREAM_ERROR",
+        )
+
+    item = Item(
+        user_id=user.id,
+        category_id=payload.category_id,
+        collection_id=payload.collection_id,
+        title=title.strip(),
+        status=payload.status,
+        rating=payload.rating,
+        progress_note=payload.progress_note,
+        memo=payload.memo,
+        external_source=EXTERNAL_SOURCE_TMDB,
+        external_id=str(payload.tmdb_id),
+        external_media_type=payload.media_type,
+        original_title=original_title,
+        original_language=original_language,
+        poster_path=poster_path,
+        backdrop_path=backdrop_path,
+        external_metadata_updated_at=datetime.now(timezone.utc),
+    )
+    try:
+        db.add(item)
+        db.flush()
+        response = _item_detail_dict(_fetch_item_detail_row(db, user.id, item.id))
+        if commit:
+            db.commit()
+        return response
+    except HTTPException:
+        if commit:
+            db.rollback()
+        raise
+    except IntegrityError as exc:
+        if commit:
+            db.rollback()
+        if _is_external_identity_unique_violation(exc):
+            raced = find_item_by_tmdb_identity(
+                db,
+                user.id,
+                media_type=payload.media_type,
+                tmdb_id=payload.tmdb_id,
+            )
+            if raced is not None:
+                _raise_tmdb_item_already_exists(raced.id)
         if _is_known_item_write_integrity_error(exc):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

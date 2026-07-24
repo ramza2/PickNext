@@ -403,3 +403,10 @@ SearchPage
 
 - Backend TMDB Client·Status·Search·Details API 및 Item 외부 식별 Migration(`0005`) 작업 진행·완료.
 - Frontend 실검색 연결·`from-tmdb` 등록은 **TMDB-2** 범위로 유지.
+
+## Post-Audit Progress (TMDB-2, 2026-07-24)
+
+- `POST /api/v1/items/from-tmdb` + 서버 Detail 재조회 + 409 `TMDB_ITEM_ALREADY_EXISTS` 구현.
+- Frontend `SearchPage` 실검색·Detail Panel·Register Form·등록됨 UX·search snapshot/`origin:"search"` 복귀.
+- Collection「TMDB 검색 후 추가」가짜 Toast 제거 → Search 이동.
+- 런타임 `TMDB_RESULTS` Mock 미사용 유지.

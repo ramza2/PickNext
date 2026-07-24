@@ -57,6 +57,13 @@ export interface ApiItemListItem {
   collection: ApiCollectionRef | null;
   created_at: string;
   updated_at: string;
+  external_source?: string | null;
+  external_id?: string | null;
+  external_media_type?: string | null;
+  original_title?: string | null;
+  original_language?: string | null;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
 }
 
 export interface ApiItemDetail extends ApiItemListItem {

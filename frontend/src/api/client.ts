@@ -33,9 +33,14 @@ function messageFromDetail(detail: unknown, fallback: string): string {
       .filter(Boolean);
     if (parts.length) return parts.join("; ");
   }
-  if (detail && typeof detail === "object" && "message" in detail) {
-    const msg = (detail as { message: unknown }).message;
-    if (typeof msg === "string" && msg.trim()) return msg;
+  if (detail && typeof detail === "object") {
+    const record = detail as { message?: unknown; code?: unknown };
+    if (typeof record.message === "string" && record.message.trim()) {
+      return record.message;
+    }
+    if (typeof record.code === "string" && record.code.trim()) {
+      return record.code;
+    }
   }
   return fallback;
 }

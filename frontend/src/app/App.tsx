@@ -90,10 +90,15 @@ import {
 } from "../api/deleteMessages";
 import type { ApiCategory, ApiCollection, ApiItemDetail, ApiItemStatus } from "../types/api";
 import { getCategoryPresentation } from "./presentation/categoryPresentation";
+import {
+  SearchPage,
+  type SearchPageSnapshot,
+} from "./search/SearchPage";
+import { unmarkDeletedItemInSearchSnapshot } from "./search/registration";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type ItemDetailOrigin = "items" | "home" | "collections";
+type ItemDetailOrigin = "items" | "home" | "collections" | "search";
 
 const HIDDEN_PAGES = new Set<Page>(["recommend", "history", "history-detail", "data"]);
 
@@ -950,6 +955,7 @@ function ItemDetailPage({
     origin: ItemDetailOrigin;
     collectionId?: string;
     collectionItemsPage?: number;
+    deletedItem: ApiItemDetail;
   }) => void | Promise<void>;
   onEdit?: (item: ApiItemDetail) => void;
   writeBusy?: boolean;
@@ -1093,6 +1099,7 @@ function ItemDetailPage({
         origin,
         collectionId: collectionId ?? item.collection?.id ?? undefined,
         collectionItemsPage,
+        deletedItem: item,
       };
       if (onDeleteSuccess) {
         await onDeleteSuccess(ctx);
@@ -1110,6 +1117,7 @@ function ItemDetailPage({
             origin,
             collectionId: collectionId ?? item.collection?.id ?? undefined,
             collectionItemsPage,
+            deletedItem: item,
           });
         } else {
           onBack();
@@ -1142,6 +1150,7 @@ function ItemDetailPage({
                 origin,
                 collectionId: collectionId ?? item.collection?.id ?? undefined,
                 collectionItemsPage,
+                deletedItem: item,
               });
             } else {
               onBack();
@@ -1568,20 +1577,7 @@ function HomePage({ setPage, openAddItem, openItemDetail }: {
 }
 
 // ─── Search Page ──────────────────────────────────────────────────────────────
-
-function SearchPage() {
-  return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-      <h1 className="text-xl font-bold text-foreground mb-5">영화·드라마 검색</h1>
-      <div className="bg-card border border-border rounded-2xl p-8 text-center">
-        <p className="text-base font-medium text-foreground mb-2">TMDB 검색 연동 준비 중</p>
-        <p className="text-sm text-muted-foreground">
-          연동이 완료되면 영화와 TV 프로그램을 검색하고 항목으로 등록할 수 있습니다.
-        </p>
-      </div>
-    </div>
-  );
-}
+// Implemented in ./search/SearchPage.tsx
 
 // ─── Items Page ───────────────────────────────────────────────────────────────
 
@@ -2078,6 +2074,7 @@ function CollectionsPage({
   onSelectionChange,
   openItemDetail,
   openAddItem,
+  onNavigateToSearch,
   itemWriteBusy,
 }: {
   showToast: (m: string) => void;
@@ -2094,6 +2091,7 @@ function CollectionsPage({
     lockedCollection: { id: string; name: string };
     collectionItemsPage?: number;
   }) => void;
+  onNavigateToSearch: () => void;
   itemWriteBusy?: boolean;
 }) {
   const onSnapshotChangeRef = useRef(onSnapshotChange);
@@ -2196,6 +2194,7 @@ function CollectionsPage({
         onBack={() => onSelectionChange(null)}
         openItemDetail={openItemDetail}
         openAddItem={openAddItem}
+        onNavigateToSearch={onNavigateToSearch}
         itemWriteBusy={itemWriteBusy}
         showToast={showToast}
         onCollectionDeleted={() => {
@@ -2410,6 +2409,7 @@ function CollectionDetailInline({
   onBack,
   openItemDetail,
   openAddItem,
+  onNavigateToSearch,
   itemWriteBusy,
   showToast,
   onCollectionDeleted,
@@ -2429,6 +2429,7 @@ function CollectionDetailInline({
     lockedCollection: { id: string; name: string };
     collectionItemsPage?: number;
   }) => void;
+  onNavigateToSearch: () => void;
   itemWriteBusy?: boolean;
   showToast: (m: string) => void;
   onCollectionDeleted: () => void;
@@ -2822,7 +2823,7 @@ function CollectionDetailInline({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => showToast("TMDB 연동은 아직 연결되지 않았습니다.")}
+            onClick={onNavigateToSearch}
             className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1"
           >
             <Search size={12}/> TMDB 검색 후 추가
@@ -3108,6 +3109,8 @@ export default function App() {
     useState<ItemsPageStateSnapshot | null>(null);
   const [collectionsSnapshot, setCollectionsSnapshot] =
     useState<CollectionsQuerySnapshot | null>(null);
+  const [searchSnapshot, setSearchSnapshot] =
+    useState<SearchPageSnapshot | null>(null);
   const [collectionDetailSelection, setCollectionDetailSelection] =
     useState<CollectionDetailSelection | null>(null);
   const [toast, setToast]                     = useState<string | null>(null);
@@ -3245,6 +3248,11 @@ export default function App() {
       setItemDetailSelection(null);
       return;
     }
+    if (selection?.origin === "search") {
+      setPage("search");
+      setItemDetailSelection(null);
+      return;
+    }
     const destination = selection?.origin ?? "items";
     setPage(destination === "collections" ? "collections" : destination);
     setItemDetailSelection(null);
@@ -3254,7 +3262,12 @@ export default function App() {
     origin: ItemDetailOrigin;
     collectionId?: string;
     collectionItemsPage?: number;
+    deletedItem: ApiItemDetail;
   }) => {
+    setSearchSnapshot((prev) =>
+      unmarkDeletedItemInSearchSnapshot(prev, context.deletedItem),
+    );
+
     if (context.origin === "collections" && context.collectionId) {
       try {
         await getCollection(context.collectionId);
@@ -3286,6 +3299,13 @@ export default function App() {
       return;
     }
 
+    if (context.origin === "search") {
+      setPage("search");
+      setItemDetailSelection(null);
+      showToast("항목을 삭제했습니다.");
+      return;
+    }
+
     setPage("items");
     setItemDetailSelection(null);
     showToast("항목을 삭제했습니다.");
@@ -3310,6 +3330,8 @@ export default function App() {
       }
     } else if (session.origin === "home") {
       setPage("home");
+    } else if (session.origin === "search") {
+      setPage("search");
     } else {
       setPage("items");
     }
@@ -3340,7 +3362,15 @@ export default function App() {
             openItemDetail={(id) => openItemDetail(id, "home")}
           />
         );
-      case "search":         return <SearchPage/>;
+      case "search":
+        return (
+          <SearchPage
+            showToast={showToast}
+            openItemDetail={(id) => openItemDetail(id, "search")}
+            initialSnapshot={searchSnapshot}
+            onSnapshotChange={setSearchSnapshot}
+          />
+        );
       case "recommend":
       case "history":
       case "history-detail":
@@ -3373,6 +3403,7 @@ export default function App() {
               openItemDetail(itemId, "collections", context)
             }
             openAddItem={(opts) => openCreateItem(opts)}
+            onNavigateToSearch={() => setPage("search")}
             itemWriteBusy={itemWriteBusy || Boolean(itemFormSession)}
           />
         );

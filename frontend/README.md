@@ -172,7 +172,8 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | Item Detail | **API** (`GET /items/{id}`) · **생성·수정(I-2)** · **삭제(D-7)** · 상태 버튼 PATCH · Poster Placeholder |
 | Collections 목록 | **API** (검색·페이지) · **생성(C-2)** |
 | Collection 인라인 상세 / 소속 Item | **API** · **이름 수정(C-2)** · **삭제(D-7)** · Item 추가(I-2) · Item 행 「제거」= 연결 해제(I-3) · 빠른 상태(I-3) |
-| History / Recommend / TMDB / Data / Settings | Mock |
+| History / Recommend / Data / Settings | Mock / 숨김·정리 |
+| TMDB Search·등록 | **API (TMDB-2)** |
 
 API 오류 시 Mock으로 조용히 Fallback하지 않습니다.
 
@@ -214,7 +215,7 @@ src/
    └─ layout/AppLayout.tsx
 ```
 
-다음: Bulk Delete / Drag & Drop / Category CRUD / History UI / TMDB / 인증 (별도). 자동화 Browser E2E는 선택.
+다음: Bulk Delete / Drag & Drop / Category CRUD / History UI / 추천 UI / 인증 (별도). 자동화 Browser E2E는 선택.
 
 현재 쓰기 상태:
 

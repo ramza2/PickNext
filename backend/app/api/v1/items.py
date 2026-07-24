@@ -1,14 +1,18 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.v1.tmdb import _raise_tmdb_http, get_tmdb_service
 from app.db.session import get_db
+from app.integrations.tmdb.errors import TmdbError
 from app.models import ItemStatus, User
 from app.schemas import (
     ItemCreate,
     ItemDetailResponse,
+    ItemFromTmdbCreate,
     ItemListResponse,
     ItemSort,
     ItemUpdate,
@@ -16,6 +20,7 @@ from app.schemas import (
 )
 from app.services import catalog
 from app.services.catalog import ItemListParams
+from app.services.tmdb_service import TmdbService
 
 router = APIRouter(tags=["items"])
 
@@ -50,6 +55,32 @@ def read_items(
         ),
     )
     return ItemListResponse(**payload)
+
+
+@router.post(
+    "/items/from-tmdb",
+    response_model=ItemDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        404: {"description": "Category, collection, or TMDB resource not found"},
+        409: {"description": "TMDB item already registered for this user"},
+        422: {"description": "Validation Error"},
+        429: {"description": "TMDB rate limited"},
+        502: {"description": "TMDB upstream error"},
+        503: {"description": "TMDB not configured or unavailable"},
+    },
+)
+async def create_item_from_tmdb(
+    payload: ItemFromTmdbCreate,
+    service: Annotated[TmdbService, Depends(get_tmdb_service)],
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ItemDetailResponse:
+    try:
+        result = await service.create_item_from_tmdb(db=db, user=user, payload=payload)
+    except TmdbError as exc:
+        _raise_tmdb_http(exc)
+    return ItemDetailResponse(**result)
 
 
 @router.get("/items/{item_id}", response_model=ItemDetailResponse)

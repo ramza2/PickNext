@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import (
@@ -13,6 +14,8 @@ from pydantic import (
 
 from app.models import CategoryType, ItemStatus, StatusFilter
 from app.services.catalog import CollectionSort, ItemSort, SortOrder
+
+TmdbMediaType = Literal["movie", "tv"]
 
 
 class ORMModel(BaseModel):
@@ -132,6 +135,50 @@ class ItemCreate(BaseModel):
     @field_validator("title", mode="before")
     @classmethod
     def normalize_title(cls, value: object) -> str:
+        return _normalize_item_title(value)
+
+    @field_validator("rating", mode="before")
+    @classmethod
+    def normalize_rating(cls, value: object) -> Decimal:
+        if value is None:
+            raise ValueError("rating must not be null")
+        return _normalize_item_rating(value)
+
+    @field_validator("progress_note", mode="before")
+    @classmethod
+    def normalize_progress_note(cls, value: object) -> str | None:
+        return _normalize_optional_progress_note(value)
+
+    @field_validator("memo", mode="before")
+    @classmethod
+    def normalize_memo(cls, value: object) -> str | None:
+        return _normalize_optional_memo(value)
+
+
+class ItemFromTmdbCreate(BaseModel):
+    """Register a PLANNED (or user-chosen) item from TMDB identity.
+
+    Trusted metadata (external_*, poster_path, …) is never taken from the client;
+    the server re-fetches TMDB detail. Optional ``title`` overrides the TMDB title.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    media_type: TmdbMediaType
+    tmdb_id: int = Field(ge=1)
+    category_id: UUID
+    collection_id: UUID | None = None
+    status: ItemStatus = ItemStatus.PLANNED
+    rating: Decimal = Decimal("0.0")
+    progress_note: str | None = None
+    memo: str | None = None
+    title: str | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: object) -> str | None:
+        if value is None:
+            return None
         return _normalize_item_title(value)
 
     @field_validator("rating", mode="before")
@@ -338,10 +385,12 @@ __all__ = [
     "HealthResponse",
     "ItemCreate",
     "ItemDetailResponse",
+    "ItemFromTmdbCreate",
     "ItemListItem",
     "ItemListResponse",
     "ItemSort",
     "ItemUpdate",
+    "TmdbMediaType",
     "ORMModel",
     "RecommendationHistoryCreate",
     "RecommendationHistoryItemCreate",
