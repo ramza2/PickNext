@@ -386,3 +386,15 @@ SearchPage
 ## 부록 C. 제품 코드 변경
 
 본 Audit는 `docs/audits/UI-AUDIT-1.md`만 추가한다. 애플리케이션·테스트 코드는 변경하지 않는다.
+
+---
+
+## Post-Audit Decision (SET-CLEAN-1, 2026-07-24)
+
+조사 시점의 사실 기록은 위 본문을 유지한다. 이후 제품된 정책:
+
+- 설정 화면의 “성인 콘텐츠 제외” Row는 **제거**한다.
+- 향후 TMDB Backend 검색은 `include_adult=true`로 **고정**한다.
+- 사용자 설정 UI나 Frontend Override는 **제공하지 않는다**.
+- 운영 UI에서 Mock 검색·가짜 계정·가짜 성공 Toast·미구현 Settings·Recommend/History/Data Nav를 제거·차단한다 (SET-CLEAN-1).
+- Category는 `GET /api/v1/categories` 기반 **읽기 전용**으로 전환한다.

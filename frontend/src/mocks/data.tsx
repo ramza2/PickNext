@@ -1,3 +1,8 @@
+/**
+ * Prototype / historical Figma Make fixtures.
+ * NOT imported by operational App routes after SET-CLEAN-1.
+ * Keep for TMDB-2 / Recommend reference only — do not wire into runtime UI.
+ */
 import { Film, Tv, BookOpen, Utensils, Smile } from "lucide-react";
 import type {
   Category,

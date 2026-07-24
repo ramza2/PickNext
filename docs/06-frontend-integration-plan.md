@@ -1,9 +1,10 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1 API·격리 DB 검증 완료 · RC-2 브라우저 수동 QA 완료 (2026-07-23) · 기본 쓰기 Release Candidate PASS**
+> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1 API·격리 DB 검증 완료 · RC-2 브라우저 수동 QA 완료 (2026-07-23) · 기본 쓰기 Release Candidate PASS** · **SET-CLEAN-1 (2026-07-24): 운영 UI Mock·가짜 성공·미구현 Nav/Settings 정리**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
-> **비범위 (잔여):** Bulk Delete, Drag & Drop, History/추천/TMDB, 인증, React Router, App.tsx Page 분리, 자동화 Browser E2E
-
+> **비범위 (잔여):** Bulk Delete, Drag & Drop, History/추천/TMDB 실연동, Category 쓰기, Export/Import, 인증, React Router, App.tsx Page 분리, 자동화 Browser E2E
+>
+> **SET-CLEAN-1 요약:** Recommend/History/Data Nav 숨김 · Search는 TMDB 준비 중 Empty · Settings는 Category 보기만 · Category는 GET 읽기 전용 · `mocks/data.tsx`는 런타임 미사용(프로토타입 보존) · 가짜 계정·Version·연동됨·성인 설정 Row 제거. 상세는 `docs/audits/UI-AUDIT-1.md` Post-Audit Decision.
 ## 1. 실행·빌드 확인 결과
 
 | 항목 | 결과 |

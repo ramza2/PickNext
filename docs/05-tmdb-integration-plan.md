@@ -71,7 +71,7 @@ TMDB 검색 결과는 **자동 저장하지 않는다.** 사용자가 내용을 
 | 검색 엔드포인트 | `GET /search/multi` |
 | 허용 `media_type` | `movie`, `tv` only (`person` 제외) |
 | 언어 | `ko-KR` (`language=ko-KR`) |
-| 성인 콘텐츠 | 제외 (`include_adult=false`) |
+| 성인 콘텐츠 | 포함 (`include_adult=true` 고정). 사용자 설정·Frontend Override 없음 |
 | 실패 시 | 직접 Item 등록 UI 제공 |
 
 ### 3.2 아키텍처
@@ -218,7 +218,7 @@ TMDB Movie·TV 유형을 PickNext Category에 1:1로 매핑하지 않는다.
 | --- | --- |
 | `TMDB_API_TOKEN` | TMDB API Read Access Token (v3) |
 | `TMDB_LANGUAGE` | 기본 `ko-KR` |
-| `TMDB_INCLUDE_ADULT` | 기본 `false` |
+| `TMDB_INCLUDE_ADULT` | 기본 `true` (고정). Frontend에서 전달·변경 금지 |
 | `TMDB_IMAGE_BASE_URL` | 포스터 Base URL (Frontend 노출용 설정 API 또는 응답 필드) |
 | `TMDB_REQUEST_TIMEOUT_SECONDS` | 외부 호출 타임아웃 (예: `5`) |
 
@@ -381,7 +381,7 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 ### 14.2 TMDB 클라이언트 (mock)
 
 - `/search/multi` 응답에서 `movie`/`tv`만 반환, `person` 제외
-- `language=ko-KR`, `include_adult=false` 파라미터 전달
+- `language=ko-KR`, `include_adult=true` 파라미터 고정 전달 (모든 search/movie·search/tv·search/multi)
 - 타임아웃 시 구조화된 예외
 - 5xx 응답 시 사용자 안전 메시지
 
