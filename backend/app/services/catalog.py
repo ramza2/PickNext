@@ -794,6 +794,13 @@ def _item_list_dict(item: Item) -> dict[str, Any]:
         "collection": _collection_ref(item.collection),
         "created_at": item.created_at,
         "updated_at": item.updated_at,
+        "external_source": item.external_source,
+        "external_id": item.external_id,
+        "external_media_type": item.external_media_type,
+        "original_title": item.original_title,
+        "original_language": item.original_language,
+        "poster_path": item.poster_path,
+        "backdrop_path": item.backdrop_path,
     }
 
 

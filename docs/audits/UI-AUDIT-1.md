@@ -398,3 +398,8 @@ SearchPage
 - 사용자 설정 UI나 Frontend Override는 **제공하지 않는다**.
 - 운영 UI에서 Mock 검색·가짜 계정·가짜 성공 Toast·미구현 Settings·Recommend/History/Data Nav를 제거·차단한다 (SET-CLEAN-1).
 - Category는 `GET /api/v1/categories` 기반 **읽기 전용**으로 전환한다.
+
+## Post-Audit Progress (TMDB-1, 2026-07-24)
+
+- Backend TMDB Client·Status·Search·Details API 및 Item 외부 식별 Migration(`0005`) 작업 진행·완료.
+- Frontend 실검색 연결·`from-tmdb` 등록은 **TMDB-2** 범위로 유지.

@@ -119,6 +119,8 @@ class CollectionUpdate(BaseModel):
 
 
 class ItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str
     category_id: UUID
     collection_id: UUID | None = None
@@ -294,6 +296,13 @@ class ItemListItem(BaseModel):
     collection: CollectionRef | None
     created_at: datetime
     updated_at: datetime
+    external_source: str | None = None
+    external_id: str | None = None
+    external_media_type: str | None = None
+    original_title: str | None = None
+    original_language: str | None = None
+    poster_path: str | None = None
+    backdrop_path: str | None = None
 
     @field_serializer("rating")
     def serialize_rating(self, value: Decimal) -> float:

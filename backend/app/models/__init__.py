@@ -138,8 +138,33 @@ class Item(Base, TimestampMixin):
             "(rating * 2) = floor(rating * 2)",
             name="ck_items_rating_half_step",
         ),
+        CheckConstraint(
+            """
+            (
+              external_source IS NULL
+              AND external_id IS NULL
+              AND external_media_type IS NULL
+            )
+            OR
+            (
+              external_source IS NOT NULL
+              AND external_id IS NOT NULL
+              AND external_media_type IS NOT NULL
+            )
+            """,
+            name="ck_items_external_identity_all_or_none",
+        ),
         Index("ix_items_user_id_category_id", "user_id", "category_id"),
         Index("ix_items_user_id_status", "user_id", "status"),
+        Index(
+            "uq_items_user_external_identity",
+            "user_id",
+            "external_source",
+            "external_media_type",
+            "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -173,6 +198,19 @@ class Item(Base, TimestampMixin):
     rating: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False)
     progress_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # External content identity (TMDB-1). All-null for Legacy/manual items.
+    external_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_media_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    original_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    poster_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    backdrop_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_metadata_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     user: Mapped[User] = relationship(back_populates="items")
     category: Mapped[Category] = relationship(back_populates="items")

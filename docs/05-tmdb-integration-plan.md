@@ -1,8 +1,50 @@
 # 05. TMDB Integration Plan
 
-> **상태:** 기획·설계 반영 (구현 전)  
-> **범위:** TMDB 기반 영화·TV 검색 및 `PLANNED` Item 등록  
-> **비범위 (이번 문서):** 실제 TMDB API 연동, Migration 실행, 모델·API·Frontend 구현, Legacy 7,202건 자동 매칭
+> **상태:** TMDB-1 Backend 기반 구현 완료 (검색·상세·Status·외부 식별 모델). TMDB-2(Frontend 연동·`from-tmdb` 등록)는 후속.  
+> **범위:** TMDB 기반 영화·TV 검색·상세 및 `PLANNED` Item 등록  
+> **비범위 (TMDB-1):** Frontend 실검색 연결, `POST /items/from-tmdb`, 운영·로컬 실데이터 DB Migration 적용, Legacy 7,202건 자동 매칭
+
+## 0. TMDB-1 / TMDB-2 범위 구분
+
+| 단계 | 포함 | 제외 |
+| --- | --- | --- |
+| **TMDB-1 (완료)** | Settings·Secret 안전 처리, Async TMDB Client, Status/Search/Details API, 응답 정규화, Image URL, Item 외부 식별 컬럼·Partial Unique Index, Migration `0005`, Mock 테스트 | Frontend 검색 UI 연결, Item 등록 API, 운영 DB migrate, Backfill |
+| **TMDB-2 (후속)** | Frontend 검색·상세, `POST /items/from-tmdb` (또는 동등), 등록 UX·중복 409 | Legacy 자동 매칭 |
+
+### TMDB-1 구현 API
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| `GET` | `/api/v1/tmdb/status` | 설정·연결 상태 (`AVAILABLE` / `NOT_CONFIGURED` / `UNAVAILABLE`), Secret 미노출 |
+| `GET` | `/api/v1/tmdb/search` | `query`, `media_type=all\|movie\|tv`, `page` — movie/tv만, person 제외 |
+| `GET` | `/api/v1/tmdb/details/{media_type}/{tmdb_id}` | movie\|tv 상세 + credits·external_ids |
+
+### 인증·정책 (확정)
+
+| 항목 | 정책 |
+| --- | --- |
+| 인증 우선순위 | `TMDB_API_READ_ACCESS_TOKEN` (Bearer) → 없으면 `TMDB_API_KEY` (`api_key` query). 동시 전송 금지 |
+| `include_adult` | Backend 고정 `true`. 환경변수·Frontend Override 없음 |
+| 언어 | `TMDB_LANGUAGE` (기본 `ko-KR`). Frontend Query로 변경 불가 |
+| 지역 | `TMDB_REGION` (기본 `KR`). 공식 Endpoint가 지원할 때만 전달 (예: `/search/movie`) |
+| 등록 여부 | `(user_id, external_source=tmdb, external_media_type, external_id)`만. 제목 Fuzzy 금지 |
+
+### Item 외부 식별 (TMDB-1 Migration `0005_add_item_external_identity`)
+
+| 필드 | 타입 | 비고 |
+| --- | --- | --- |
+| `external_source` | `VARCHAR(32)` NULL | 예: `"tmdb"` |
+| `external_id` | `VARCHAR(64)` NULL | TMDB ID 문자열 |
+| `external_media_type` | `VARCHAR(16)` NULL | `"movie"` \| `"tv"` |
+| `original_title` | `TEXT` NULL | |
+| `original_language` | `VARCHAR(16)` NULL | |
+| `poster_path` / `backdrop_path` | `VARCHAR(500)` NULL | 상대 경로 |
+| `external_metadata_updated_at` | timestamptz NULL | |
+
+- Check: 세 식별 필드 모두 NULL 또는 모두 NOT NULL  
+- Unique: `uq_items_user_external_identity` on `(user_id, external_source, external_media_type, external_id)` WHERE `external_id IS NOT NULL`  
+- 일반 `POST/PATCH /items`는 외부 식별 필드를 받지 않음 (`extra=forbid`). 값은 TMDB-2 등록 API가 설정  
+- Legacy 7,202건은 NULL 유지. Backfill·자동 매칭 없음. **실데이터 DB에는 TMDB-1에서 Migration을 적용하지 않음** (파일·격리 DB 검증만)
 
 ## 1. 기능 목적
 
@@ -212,18 +254,23 @@ TMDB Movie·TV 유형을 PickNext Category에 1:1로 매핑하지 않는다.
 
 ## 8. API Key 보안
 
-### 8.1 환경변수 (구현 시 `.env.example` 반영)
+### 8.1 환경변수
 
 | 변수 | 설명 |
 | --- | --- |
-| `TMDB_API_TOKEN` | TMDB API Read Access Token (v3) |
+| `TMDB_API_READ_ACCESS_TOKEN` | 1순위 인증 (Bearer). SecretStr |
+| `TMDB_API_KEY` | 2순위 인증 (`api_key` query). Token과 동시 미사용 |
 | `TMDB_LANGUAGE` | 기본 `ko-KR` |
-| `TMDB_INCLUDE_ADULT` | 기본 `true` (고정). Frontend에서 전달·변경 금지 |
-| `TMDB_IMAGE_BASE_URL` | 포스터 Base URL (Frontend 노출용 설정 API 또는 응답 필드) |
-| `TMDB_REQUEST_TIMEOUT_SECONDS` | 외부 호출 타임아웃 (예: `5`) |
+| `TMDB_REGION` | 기본 `KR` (지원 Endpoint만) |
+| `TMDB_API_BASE_URL` | 기본 `https://api.themoviedb.org/3` |
+| `TMDB_REQUEST_TIMEOUT_SECONDS` | 기본 `10` |
+| `TMDB_CONFIGURATION_TTL_SECONDS` | Configuration 캐시 (기본 86400) |
+| `TMDB_STATUS_TTL_SECONDS` | Status 캐시 (기본 60) |
+| `TMDB_POSTER_SIZE` / `TMDB_BACKDROP_SIZE` / `TMDB_PROFILE_SIZE` | 기본 `w500` / `w780` / `w185` |
 
-토큰 미설정 시: TMDB 관련 API는 `503` 또는 구조화된 오류 반환, **기존 Item·추천·Health는 정상**.
+`include_adult`는 코드 상수로 `true` 고정. 환경변수로 두지 않는다.
 
+토큰·키가 모두 없으면: `/tmdb/status`는 HTTP 200 + `NOT_CONFIGURED`, 검색·상세는 `503` / `TMDB_NOT_CONFIGURED`. Health·Items·Collections는 정상.
 ### 8.2 오류 처리
 
 - TMDB 타임아웃·5xx: 사용자에게 일반 메시지 ("검색 서비스를 일시적으로 사용할 수 없습니다")
@@ -234,24 +281,21 @@ TMDB Movie·TV 유형을 PickNext Category에 1:1로 매핑하지 않는다.
 
 모든 경로는 `API_V1_PREFIX` (`/api/v1`) 하위. 인증 도입 전까지는 Seed 사용자 또는 향후 세션 사용자 기준 `user_id` 스코프.
 
-### 9.1 TMDB 프록시 (읽기 전용)
+### 9.1 TMDB 프록시 (읽기 전용) — TMDB-1 구현
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| `GET` | `/external/tmdb/search` | 통합 검색 (`query`, `page`) |
-| `GET` | `/external/tmdb/movie/{tmdb_id}` | 영화 상세 |
-| `GET` | `/external/tmdb/tv/{tmdb_id}` | TV 상세 |
+| `GET` | `/tmdb/status` | 연결 상태 |
+| `GET` | `/tmdb/search` | `query`, `media_type=all\|movie\|tv`, `page` |
+| `GET` | `/tmdb/details/{media_type}/{tmdb_id}` | movie\|tv 상세 |
 
-**쿼리 예 (search):** `?query=인터스텔라&page=1`
+검색·상세 응답은 PickNext DTO이며 `registered` / `registered_item_id`를 포함한다. Image URL은 `/configuration` 기반(캐시)으로 Backend가 조합한다.
 
-응답은 TMDB 원본 JSON 전체가 아닌 **PickNext 전용 DTO**로 변환한다.
-
-### 9.2 등록
+### 9.2 등록 — TMDB-2
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| `POST` | `/items/from-tmdb` | TMDB 메타 기반 `PLANNED` Item 생성 |
-
+| `POST` | `/items/from-tmdb` | TMDB 메타 기반 `PLANNED` Item 생성 (미구현) |
 ### 9.3 응답 모델 (안)
 
 **검색 결과 항목 (`TmdbSearchResultItem`):**
@@ -304,25 +348,26 @@ TMDB Movie·TV 유형을 PickNext Category에 1:1로 매핑하지 않는다.
 | `502` / `503` | TMDB 장애·타임아웃 |
 | `404` | TMDB ID 없음 |
 
-## 10. Alembic Migration 초안 (`0005_tmdb_item_metadata`)
+## 10. Alembic Migration (`0005_add_item_external_identity`)
 
-> **번호 주의:** `0004_remove_item_soft_delete`는 Soft Delete 제거용으로 **이미 적용됨**. TMDB는 **0005** 후보.
-> **이번 단계에서는 실행하지 않는다.** 구현 시 참고용 초안.
+> Revises: `0004_remove_item_soft_delete`  
+> **실데이터(로컬 7202 / DPL-3)에는 TMDB-1에서 적용하지 않음.** 격리 DB에서 upgrade·downgrade·재upgrade 검증.
+
+구현:
 
 ```text
-Revision ID: 0005_tmdb_item_metadata
-Revises: 0004_remove_item_soft_delete
-
-upgrade() 요약:
-1. CREATE TYPE external_source AS ENUM ('TMDB')
-2. CREATE TYPE external_media_type AS ENUM ('MOVIE', 'TV')
-3~10. items에 external_* / poster_path / overview / release_date / original_title / external_rating 추가
-11. CREATE UNIQUE INDEX uq_items_user_external
-    ON items (user_id, external_source, external_media_type, external_id)
-    WHERE external_id IS NOT NULL
+- nullable columns: external_source, external_id, external_media_type,
+  original_title, original_language, poster_path, backdrop_path,
+  external_metadata_updated_at
+- CHECK ck_items_external_identity_all_or_none
+- UNIQUE INDEX uq_items_user_external_identity
+  ON (user_id, external_source, external_media_type, external_id)
+  WHERE external_id IS NOT NULL
 ```
 
-Hard Delete 전제라 Soft Delete partial 조건(`deleted_at IS NULL`)은 사용하지 않는다.
+문자열 식별자·소문자 `tmdb` / `movie` / `tv`를 사용한다 (초기 ENUM 초안은 폐기).
+
+Hard Delete 전제라 Soft Delete partial 조건은 사용하지 않는다.
 
 
 ## 11. Export·Import 영향
@@ -405,13 +450,15 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 - 추천 후보 쿼리(존재 Item 전체)에 TMDB Item 포함 정상
 - Import·보정 CLI 무변경
 
-## 15. 이번 작업에서 수행하지 않은 것
+## 15. TMDB-1에서 수행하지 않은 것
 
-- 실제 TMDB API 호출 코드
-- DB Migration 실행 및 `items` 모델 변경
-- CRUD·추천·Frontend 구현
-- Legacy 데이터 TMDB 자동 매칭
+- Frontend 검색·상세 실연동
+- `POST /items/from-tmdb` (및 동등 등록 API)
+- 로컬 실데이터 DB·DPL-3에 Migration 적용
+- Legacy 데이터 TMDB 자동 매칭·Backfill
 - 기존 7,202 Item 수정
+- 검색·상세 결과 Cache / Redis
+- Trailer·Watch Provider·추천 History
 
 ## 16. 관련 문서
 

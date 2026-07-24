@@ -83,6 +83,28 @@ if (!/ports:\s*!override/.test(local)) {
 }
 ok("local port overrides present");
 
+if (!/nginx\.local\.conf:\/etc\/nginx\/conf\.d\/default\.conf/.test(local)) {
+  fail("local override must mount frontend/nginx.local.conf over default.conf");
+}
+ok("local nginx.local.conf mount");
+
+const nginxLocalPath = path.join(root, "frontend", "nginx.local.conf");
+if (!fs.existsSync(nginxLocalPath)) fail("frontend/nginx.local.conf missing");
+const nginxLocal = fs.readFileSync(nginxLocalPath, "utf8");
+if (!/location\s+\/api\//.test(nginxLocal)) {
+  fail("nginx.local.conf must define location /api/");
+}
+if (!/proxy_pass\s+http:\/\/backend:8000/.test(nginxLocal)) {
+  fail("nginx.local.conf must proxy_pass to http://backend:8000");
+}
+ok("nginx.local.conf /api → backend:8000");
+
+const nginxProd = read("frontend/nginx.conf");
+if (/location\s+\/api\//.test(nginxProd) || /proxy_pass/.test(nginxProd)) {
+  fail("production nginx.conf must not include /api proxy (DPL-3 Traefik owns /api)");
+}
+ok("production nginx.conf has no /api proxy");
+
 console.log("verify-docker-compose: ok");
 console.log(
   "verify-docker-compose: note — run `docker compose -f compose.yaml -f compose.local.yaml config` for merge validation",

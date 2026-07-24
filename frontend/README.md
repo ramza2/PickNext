@@ -52,7 +52,8 @@ docker build \
 | Health | `GET /health` → `200` `text/plain` `ok` |
 | SPA | `try_files` → 없는 경로도 `index.html` |
 | Asset Cache | `/assets/*` 장기 Cache · `index.html` No-cache |
-| API Proxy | **없음** (Traefik이 `/`·`/api` 분기는 DPL-2·DPL-3) |
+| API Proxy (이미지) | **없음** — 운영은 Traefik이 `/`·`/api` 분기 (DPL-3) |
+| Local Compose Proxy | `compose.local.yaml`이 `nginx.local.conf`를 마운트 → `/api` → `backend:8000` |
 
 Vite 변수는 **Build-time**에 Bundle에 삽입됩니다. Browser에 공개되는 값만 넣고, Secret·TMDB Token은 넣지 않습니다.
 
@@ -76,9 +77,16 @@ docker rm -f picknext-frontend-dpl1
 
 관련 파일: `frontend/Dockerfile`, `frontend/nginx.conf`, `frontend/.dockerignore`
 
-Compose 통합(DPL-2): Root `compose.yaml`의 `frontend` 서비스 + `compose.local.yaml` Loopback(`127.0.0.1:5183`).
-동일 Origin API는 Traefik Overlay `compose.traefik.yaml`(DPL-3)이며 Frontend Nginx는 `/api`를 Proxy하지 않습니다.
-Production: `compose.yaml` + `compose.traefik.yaml` (local Overlay와 동시 사용 금지). 상세는 Root `README.md`.
+Compose 통합(로컬/DPL-2): Root `compose.yaml` + `compose.local.yaml` Loopback(`127.0.0.1:5183`).
+로컬에서 동일 Origin `/api`는 `frontend/nginx.local.conf`가 Compose 서비스 `backend:8000`으로 Proxy합니다 (이미지 재빌드 불필요).
+Production: `compose.yaml` + `compose.traefik.yaml` — Traefik이 `/api` 분기, `nginx.conf`에 proxy 없음. local Overlay와 동시 사용 금지. 상세는 Root `README.md`.
+
+```bash
+# 로컬 Docker UI + API (저장소 루트)
+docker compose -f compose.yaml -f compose.local.yaml up -d
+curl -i http://127.0.0.1:5183/health
+curl -i http://127.0.0.1:5183/api/v1/health
+```
 
 ## PWA (PWA-1)
 

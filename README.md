@@ -75,7 +75,8 @@ Base `compose.yaml`의 `frontend`는 DPL-1 Nginx 이미지를 Build하며 **Host
 | Container Port | 80 |
 | Health | `GET /health` → `ok` |
 | Local URL | http://127.0.0.1:5183/ |
-| API Proxy | **없음** (동일 Origin `/api`는 **DPL-3 Traefik**) |
+| Local API Proxy | `compose.local.yaml` → `frontend/nginx.local.conf` (`/api` → `backend:8000`) |
+| Production API | **DPL-3 Traefik** (`/`·`/api` 분기). 이미지 `nginx.conf`에는 `/api` proxy **없음** |
 | 운영 예정 | https://picknext.ramza.duckdns.org/ |
 
 DPL-2 격리 Project (`picknext-dpl2`, 전용 Named Volume `picknext-dpl2_postgres_data`):
@@ -390,7 +391,7 @@ pytest -q
 - 인증·로그인
 - Category/Item/Collection 쓰기 API
 - 랜덤 추천·선택·이력 API
-- TMDB API 실제 연동 (기획 문서만 반영)
+- TMDB API 실제 연동 (Backend TMDB-1: Status·Search·Details 완료 / Frontend·등록은 TMDB-2)
 - Traefik Overlay / 동일 Origin Routing (DPL-3)
 
 ## 다음 개발 단계

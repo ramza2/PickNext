@@ -271,8 +271,11 @@ def test_item_detail(api_client: TestClient, catalog_data: dict) -> None:
     payload = response.json()
     assert len(payload["title"]) == 321
     assert payload["memo"] is None
-    assert "poster_path" not in payload
-    assert "external_source" not in payload
+    # TMDB-1: external identity fields are present and null for Legacy items
+    assert payload["poster_path"] is None
+    assert payload["external_source"] is None
+    assert payload["external_id"] is None
+    assert payload["external_media_type"] is None
 
     with_col = catalog_data["items"]["007 골드핑거"]
     detail = api_client.get(f"/api/v1/items/{with_col.id}").json()
