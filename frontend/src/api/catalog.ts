@@ -138,6 +138,8 @@ export interface ItemCreatePayload {
   rating?: number;
   progress_note?: string | null;
   memo?: string | null;
+  release_year?: number | null;
+  synopsis?: string | null;
 }
 
 export interface ItemUpdatePayload {
@@ -148,6 +150,8 @@ export interface ItemUpdatePayload {
   rating?: number;
   progress_note?: string | null;
   memo?: string | null;
+  release_year?: number | null;
+  synopsis?: string | null;
 }
 
 export function createItem(

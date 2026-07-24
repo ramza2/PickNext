@@ -410,3 +410,11 @@ SearchPage
 - Frontend `SearchPage` 실검색·Detail Panel·Register Form·등록됨 UX·search snapshot/`origin:"search"` 복귀.
 - Collection「TMDB 검색 후 추가」가짜 Toast 제거 → Search 이동.
 - 런타임 `TMDB_RESULTS` Mock 미사용 유지.
+
+## Post-Audit Progress (TMDB-3, 2026-07-24)
+
+- `items.release_year` + `items.synopsis` + Migration `0006_add_item_year_synopsis` + Check `ck_items_release_year_range`.
+- Item API `release_year`·`synopsis`·`poster_url`·`backdrop_url` (TMDB path 기반 순수 URL, Configuration 호출 없음).
+- TMDB `overview` → Item `synopsis` (trim, 빈값 NULL). `memo`/`progress_note`와 분리. 기존 Item Backfill 없음.
+- 수동 Item Form 출시년도·줄거리 · UI Poster/연도 (목록·상세·Collection·Home) · Item 상세 줄거리 실데이터 연결 (고정 Placeholder 제거).
+- Legacy NULL·Placeholder 유지. 실데이터 `0006` 적용은 별도 Backup·승인 후.

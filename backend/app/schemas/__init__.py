@@ -103,6 +103,43 @@ def _normalize_optional_memo(value: object) -> str | None:
     return normalized
 
 
+def _normalize_optional_release_year(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise TypeError("release_year must be an integer")
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        if not trimmed.isdigit():
+            raise ValueError("release_year must be an integer between 1000 and 9999")
+        year = int(trimmed)
+    elif isinstance(value, float):
+        if not value.is_integer():
+            raise ValueError("release_year must be an integer between 1000 and 9999")
+        year = int(value)
+    elif isinstance(value, int):
+        year = value
+    else:
+        raise TypeError("release_year must be an integer")
+    if year < 1000 or year > 9999:
+        raise ValueError("release_year must be between 1000 and 9999")
+    return year
+
+
+def _normalize_optional_synopsis(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError("synopsis must be a string")
+    # Preserve internal newlines; only strip ends. Empty/whitespace → NULL.
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
 class CollectionCreate(BaseModel):
     name: str
 
@@ -131,6 +168,8 @@ class ItemCreate(BaseModel):
     rating: Decimal = Decimal("0.0")
     progress_note: str | None = None
     memo: str | None = None
+    release_year: int | None = None
+    synopsis: str | None = None
 
     @field_validator("title", mode="before")
     @classmethod
@@ -153,6 +192,16 @@ class ItemCreate(BaseModel):
     @classmethod
     def normalize_memo(cls, value: object) -> str | None:
         return _normalize_optional_memo(value)
+
+    @field_validator("release_year", mode="before")
+    @classmethod
+    def normalize_release_year(cls, value: object) -> int | None:
+        return _normalize_optional_release_year(value)
+
+    @field_validator("synopsis", mode="before")
+    @classmethod
+    def normalize_synopsis(cls, value: object) -> str | None:
+        return _normalize_optional_synopsis(value)
 
 
 class ItemFromTmdbCreate(BaseModel):
@@ -209,6 +258,8 @@ class ItemUpdate(BaseModel):
     rating: Decimal | None = None
     progress_note: str | None = None
     memo: str | None = None
+    release_year: int | None = None
+    synopsis: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -244,6 +295,16 @@ class ItemUpdate(BaseModel):
         if value is None:
             return None
         return _normalize_optional_memo(value)
+
+    @field_validator("release_year", mode="before")
+    @classmethod
+    def normalize_release_year(cls, value: object) -> object:
+        return _normalize_optional_release_year(value)
+
+    @field_validator("synopsis", mode="before")
+    @classmethod
+    def normalize_synopsis(cls, value: object) -> object:
+        return _normalize_optional_synopsis(value)
 
     @model_validator(mode="after")
     def validate_explicit_nulls(self) -> "ItemUpdate":
@@ -350,6 +411,10 @@ class ItemListItem(BaseModel):
     original_language: str | None = None
     poster_path: str | None = None
     backdrop_path: str | None = None
+    release_year: int | None = None
+    poster_url: str | None = None
+    backdrop_url: str | None = None
+    synopsis: str | None = None
 
     @field_serializer("rating")
     def serialize_rating(self, value: Decimal) -> float:

@@ -54,6 +54,14 @@ def year_from_date(value: date | None) -> int | None:
     return value.year if value is not None else None
 
 
+def normalize_overview_text(value: object) -> str | None:
+    """Normalize TMDB overview for DTO/Item storage: trim; empty → None."""
+    if value is None or not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
 class TmdbService:
     def __init__(self, settings: Settings, client: TmdbClient) -> None:
         self._settings = settings
@@ -206,7 +214,7 @@ class TmdbService:
                 if isinstance(original_title, str) and original_title.strip()
                 else None
             ),
-            overview=raw.get("overview") if isinstance(raw.get("overview"), str) else None,
+            overview=normalize_overview_text(raw.get("overview")),
             original_language=(
                 raw.get("original_language")
                 if isinstance(raw.get("original_language"), str)
@@ -518,7 +526,7 @@ class TmdbService:
                 if isinstance(original_title, str) and original_title.strip()
                 else None
             ),
-            overview=raw.get("overview") if isinstance(raw.get("overview"), str) else None,
+            overview=normalize_overview_text(raw.get("overview")),
             tagline=raw.get("tagline") if isinstance(raw.get("tagline"), str) else None,
             original_language=(
                 raw.get("original_language")
@@ -570,13 +578,15 @@ class TmdbService:
         *,
         media_type: str,
         raw: dict[str, Any],
-    ) -> dict[str, str | None]:
+    ) -> dict[str, Any]:
         if media_type == "movie":
             title = raw.get("title")
             original_title = raw.get("original_title")
+            release = parse_tmdb_date(raw.get("release_date"))
         else:
             title = raw.get("name")
             original_title = raw.get("original_name")
+            release = parse_tmdb_date(raw.get("first_air_date"))
 
         if not isinstance(title, str) or not title.strip():
             title = original_title if isinstance(original_title, str) else None
@@ -604,6 +614,8 @@ class TmdbService:
             "original_language": original_language,
             "poster_path": poster_path,
             "backdrop_path": backdrop_path,
+            "release_year": year_from_date(release),
+            "synopsis": normalize_overview_text(raw.get("overview")),
         }
 
     async def create_item_from_tmdb(
@@ -634,4 +646,6 @@ class TmdbService:
             original_language=trusted["original_language"],
             poster_path=trusted["poster_path"],
             backdrop_path=trusted["backdrop_path"],
+            release_year=trusted["release_year"],
+            synopsis=trusted["synopsis"],
         )

@@ -69,6 +69,8 @@ class FakeTmdbRouter:
     def __init__(self) -> None:
         self.calls: list[httpx.Request] = []
         self.include_search: bool = False
+        self.movie_details_override: dict[str, Any] | None = None
+        self.tv_details_override: dict[str, Any] | None = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(request)
@@ -96,9 +98,19 @@ class FakeTmdbRouter:
         if "/movie/" in path:
             if path.endswith("/999999"):
                 return httpx.Response(404, json={"status_code": 34})
-            return httpx.Response(200, json=_movie_details_payload())
+            payload = (
+                self.movie_details_override
+                if self.movie_details_override is not None
+                else _movie_details_payload()
+            )
+            return httpx.Response(200, json=payload)
         if "/tv/" in path:
-            return httpx.Response(200, json=_tv_details_payload())
+            payload = (
+                self.tv_details_override
+                if self.tv_details_override is not None
+                else _tv_details_payload()
+            )
+            return httpx.Response(200, json=payload)
         return httpx.Response(500, json={"error": "unexpected"})
 
 
@@ -192,6 +204,10 @@ def test_register_movie_from_tmdb(
     assert body["original_language"] == "en"
     assert body["poster_path"] == "/p.jpg"
     assert body["backdrop_path"] == "/b.jpg"
+    assert body["release_year"] == 2023
+    assert body["poster_url"] == "https://image.tmdb.org/t/p/w500/p.jpg"
+    assert body["backdrop_url"] == "https://image.tmdb.org/t/p/w780/b.jpg"
+    assert body["synopsis"] == "줄거리"
     assert body["status"] == "PLANNED"
     assert body["rating"] == 0.0
     assert body["category"]["id"] == str(category.id)
@@ -221,7 +237,80 @@ def test_register_tv_from_tmdb(tmdb_reg_api, category: Category) -> None:
     assert body["external_media_type"] == "tv"
     assert body["external_id"] == "93405"
     assert body["original_title"] == "Squid Game"
+    assert body["release_year"] == 2021
+    assert body["poster_url"] == "https://image.tmdb.org/t/p/w500/tv.jpg"
+    assert body["synopsis"] == "tv"
     assert body["memo"] == "볼 예정"
+
+
+def test_register_movie_blank_overview_sets_null_synopsis(
+    tmdb_reg_api, category: Category
+) -> None:
+    client, router, _ = tmdb_reg_api
+    payload = _movie_details_payload()
+    payload["overview"] = "   "
+    router.movie_details_override = payload
+    response = client.post(
+        "/api/v1/items/from-tmdb",
+        json={
+            "media_type": "movie",
+            "tmdb_id": 872585,
+            "category_id": str(category.id),
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["synopsis"] is None
+
+
+def test_forged_synopsis_not_accepted_on_from_tmdb(
+    tmdb_reg_api, category: Category
+) -> None:
+    client, _, _ = tmdb_reg_api
+    response = client.post(
+        "/api/v1/items/from-tmdb",
+        json={
+            "media_type": "movie",
+            "tmdb_id": 872585,
+            "category_id": str(category.id),
+            "synopsis": "위조 줄거리",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_register_movie_missing_date_sets_null_year(
+    tmdb_reg_api, category: Category
+) -> None:
+    client, router, _ = tmdb_reg_api
+    payload = _movie_details_payload()
+    payload["release_date"] = ""
+    router.movie_details_override = payload
+    response = client.post(
+        "/api/v1/items/from-tmdb",
+        json={
+            "media_type": "movie",
+            "tmdb_id": 872585,
+            "category_id": str(category.id),
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["release_year"] is None
+
+
+def test_forged_release_year_not_accepted_on_from_tmdb(
+    tmdb_reg_api, category: Category
+) -> None:
+    client, _, _ = tmdb_reg_api
+    response = client.post(
+        "/api/v1/items/from-tmdb",
+        json={
+            "media_type": "movie",
+            "tmdb_id": 872585,
+            "category_id": str(category.id),
+            "release_year": 1999,
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_register_duplicate_returns_409(

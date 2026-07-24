@@ -376,7 +376,7 @@ pytest -q
 ## 현재 구현 범위
 
 - Monorepo 골격 + Figma Make Frontend 기준선
-- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0005`)
+- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0006`)
 - 개발용 Seed (멱등), Health Check API
 - Docker Compose (`backend`, `postgres`, `frontend`)
 - Legacy Dry-run / Import / 보정 CLI

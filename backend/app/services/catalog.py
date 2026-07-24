@@ -16,6 +16,7 @@ from sqlalchemy import Select, asc, delete, desc, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.integrations.tmdb.images import item_backdrop_url, item_poster_url
 from app.models import (
     Category,
     Collection,
@@ -394,6 +395,8 @@ def create_item(
         rating=payload.rating,
         progress_note=payload.progress_note,
         memo=payload.memo,
+        release_year=payload.release_year,
+        synopsis=payload.synopsis,
     )
     try:
         db.add(item)
@@ -431,6 +434,8 @@ def create_item_from_tmdb(
     original_language: str | None,
     poster_path: str | None,
     backdrop_path: str | None,
+    release_year: int | None,
+    synopsis: str | None,
     commit: bool = True,
 ) -> dict[str, Any]:
     """Create an item with server-trusted TMDB external identity fields.
@@ -479,6 +484,8 @@ def create_item_from_tmdb(
         original_language=original_language,
         poster_path=poster_path,
         backdrop_path=backdrop_path,
+        release_year=release_year,
+        synopsis=synopsis,
         external_metadata_updated_at=datetime.now(timezone.utc),
     )
     try:
@@ -554,6 +561,10 @@ def update_item(
         new_values["progress_note"] = payload.progress_note
     if "memo" in fields:
         new_values["memo"] = payload.memo
+    if "release_year" in fields:
+        new_values["release_year"] = payload.release_year
+    if "synopsis" in fields:
+        new_values["synopsis"] = payload.synopsis
     if "collection_id" in fields:
         new_collection_id = payload.collection_id
         old_collection_id = item.collection_id
@@ -940,6 +951,16 @@ def _item_list_dict(item: Item) -> dict[str, Any]:
         "original_language": item.original_language,
         "poster_path": item.poster_path,
         "backdrop_path": item.backdrop_path,
+        "release_year": item.release_year,
+        "synopsis": item.synopsis,
+        "poster_url": item_poster_url(
+            external_source=item.external_source,
+            poster_path=item.poster_path,
+        ),
+        "backdrop_url": item_backdrop_url(
+            external_source=item.external_source,
+            backdrop_path=item.backdrop_path,
+        ),
     }
 
 

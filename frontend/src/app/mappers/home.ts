@@ -25,6 +25,8 @@ export interface HomeRecentItemViewModel {
   collectionName: string | null;
   createdAt: string;
   updatedAt: string;
+  releaseYear: number | null;
+  posterUrl: string | null;
   presentation: CategoryPresentation;
   /** List-summary only; full detail API is Phase B-2c. */
   source: "api-summary";
@@ -58,6 +60,8 @@ export function mapApiItemToHomeRecentItem(
     collectionName: item.collection?.name ?? null,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
+    releaseYear: item.release_year ?? null,
+    posterUrl: item.poster_url ?? null,
     presentation: getCategoryPresentation(item.category.name),
     source: "api-summary",
   };

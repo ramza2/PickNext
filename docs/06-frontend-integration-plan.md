@@ -1,11 +1,12 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1/RC-2 PASS** · **SET-CLEAN-1** · **TMDB-2 (2026-07-24): Search 실검색·상세·from-tmdb 등록 연동**
-> **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)  
+> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1/RC-2 PASS** · **SET-CLEAN-1** · **TMDB-2 (2026-07-24): Search 실검색·상세·from-tmdb 등록 연동** · **TMDB-3 (2026-07-24): Item Poster·출시년도 표시**
+> **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)
 > **비범위 (잔여):** Bulk Delete, Drag & Drop, History/추천 UI, Category 쓰기, Export/Import, 인증, React Router, 자동화 Browser E2E
 >
-> **SET-CLEAN-1 요약:** Recommend/History/Data Nav 숨김 · Settings는 Category 보기만 · Category는 GET 읽기 전용 · `mocks/data.tsx`는 런타임 미사용.  
+> **SET-CLEAN-1 요약:** Recommend/History/Data Nav 숨김 · Settings는 Category 보기만 · Category는 GET 읽기 전용 · `mocks/data.tsx`는 런타임 미사용.
 > **TMDB-2 요약:** `SearchPage`가 `GET /tmdb/status|search|details` + `POST /items/from-tmdb` 연동. Detail Panel·Register Form·등록됨 UX·`searchSnapshot`/`origin:"search"` 복귀. Collection「TMDB 검색 후 추가」→ Search 이동.
+> **TMDB-3 요약:** Item API `release_year`·`synopsis`·`poster_url`/`backdrop_url`. 수동 Form 출시년도·줄거리. 목록·상세·Collection·Home Poster·연도. Item 상세 줄거리는 DB `synopsis`(TMDB overview). Placeholder 유지. Frontend TMDB URL 조립·`VITE_TMDB_*` 없음.
 ## 1. 실행·빌드 확인 결과
 
 | 항목 | 결과 |

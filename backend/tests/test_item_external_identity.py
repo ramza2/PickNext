@@ -206,7 +206,11 @@ def test_item_model_has_external_identity_metadata() -> None:
         "poster_path",
         "backdrop_path",
         "external_metadata_updated_at",
+        "release_year",
+        "synopsis",
     ):
         assert name in cols
     index_names = {index.name for index in Item.__table__.indexes}
     assert "uq_items_user_external_identity" in index_names
+    constraint_names = {c.name for c in Item.__table__.constraints}
+    assert "ck_items_release_year_range" in constraint_names

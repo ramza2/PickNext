@@ -64,6 +64,10 @@ export interface ApiItemListItem {
   original_language?: string | null;
   poster_path?: string | null;
   backdrop_path?: string | null;
+  release_year?: number | null;
+  poster_url?: string | null;
+  backdrop_url?: string | null;
+  synopsis?: string | null;
 }
 
 export interface ApiItemDetail extends ApiItemListItem {

@@ -41,6 +41,7 @@ import {
   mapApiItemDetailToViewModel,
 } from "./mappers/itemDetail";
 import { formatDate } from "../utils/date";
+import { ContentPoster, formatReleaseYearMeta } from "./components/ContentPoster";
 import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories, getAllCollectionsForSelect } from "../api/catalog";
 import {
   collectionCreateFailureToast,
@@ -345,6 +346,8 @@ function emptyItemFormValues(
     rating: 0,
     progressNote: "",
     memo: "",
+    releaseYear: "",
+    synopsis: "",
     ...overrides,
   };
 }
@@ -394,11 +397,13 @@ function ItemFormModal({
   const titleRef = useRef<HTMLInputElement>(null);
   const categorySectionRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLInputElement>(null);
+  const releaseYearRef = useRef<HTMLInputElement>(null);
   const formErrorRef = useRef<HTMLParagraphElement>(null);
   const titleId = "item-form-modal-title";
   const titleErrorId = "item-form-title-error";
   const categoryErrorId = "item-form-category-error";
   const progressErrorId = "item-form-progress-error";
+  const releaseYearErrorId = "item-form-release-year-error";
   const formErrorId = "item-form-modal-error";
   const formBusy = pending || busy;
 
@@ -480,6 +485,7 @@ function ItemFormModal({
       if (key === "title") delete next.title;
       if (key === "categoryId") delete next.categoryId;
       if (key === "progressNote") delete next.progressNote;
+      if (key === "releaseYear") delete next.releaseYear;
       return next;
     });
     if (serverError) setServerError(null);
@@ -506,6 +512,11 @@ function ItemFormModal({
       if (errors.progressNote) {
         progressRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
         progressRef.current?.focus();
+        return;
+      }
+      if (errors.releaseYear) {
+        releaseYearRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        releaseYearRef.current?.focus();
         return;
       }
       if (errors.form) {
@@ -847,6 +858,30 @@ function ItemFormModal({
           </div>
 
           <div>
+            <label htmlFor="item-form-release-year" className="block text-sm font-medium text-foreground mb-1.5">
+              출시년도 <span className="text-muted-foreground font-normal text-xs">(선택)</span>
+            </label>
+            <input
+              ref={releaseYearRef}
+              id="item-form-release-year"
+              value={values.releaseYear}
+              disabled={formBusy}
+              inputMode="numeric"
+              autoComplete="off"
+              onChange={(event) => updateField("releaseYear", event.target.value)}
+              placeholder="예: 2023"
+              aria-invalid={fieldErrors.releaseYear ? true : undefined}
+              aria-describedby={fieldErrors.releaseYear ? releaseYearErrorId : undefined}
+              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+            />
+            {fieldErrors.releaseYear && (
+              <p id={releaseYearErrorId} role="alert" className="text-xs text-red-600 break-words mt-1.5">
+                {fieldErrors.releaseYear}
+              </p>
+            )}
+          </div>
+
+          <div>
             <label htmlFor="item-form-progress" className="block text-sm font-medium text-foreground mb-1.5">
               진행 상황 <span className="text-muted-foreground font-normal text-xs">(선택)</span>
             </label>
@@ -877,6 +912,21 @@ function ItemFormModal({
                 {progressLength}/200
               </span>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="item-form-synopsis" className="block text-sm font-medium text-foreground mb-1.5">
+              줄거리 <span className="text-muted-foreground font-normal text-xs">(선택)</span>
+            </label>
+            <textarea
+              id="item-form-synopsis"
+              value={values.synopsis}
+              disabled={formBusy}
+              onChange={(event) => updateField("synopsis", event.target.value)}
+              rows={4}
+              placeholder="작품 줄거리"
+              className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 resize-y min-h-[6rem] disabled:opacity-50"
+            />
           </div>
 
           <div>
@@ -1064,6 +1114,9 @@ function ItemDetailPage({
   const updatedLabel = formatDate(vm.updatedAt);
 
   const detailRows = [
+    ...(vm.releaseYear != null
+      ? [{ label: "출시년도", value: String(vm.releaseYear), muted: false }]
+      : []),
     {
       label: "Progress Note",
       value: vm.progressNote ?? "등록된 진행 정보가 없습니다.",
@@ -1182,10 +1235,14 @@ function ItemDetailPage({
       {/* Header */}
       <div className="bg-card border border-border rounded-2xl p-6 mb-4">
         <div className="flex gap-5">
-          <div className="w-32 h-48 text-4xl rounded-2xl flex items-center justify-center flex-shrink-0 text-white font-bold"
-            style={{ backgroundColor: vm.presentation.color }}>
-            {vm.title.charAt(0)}
-          </div>
+          <ContentPoster
+            src={vm.posterUrl}
+            title={vm.title}
+            fallbackColor={vm.presentation.color}
+            size="lg"
+            roundedClassName="rounded-2xl"
+            loading="eager"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap gap-1.5 mb-2">
               <span className="inline-flex items-center gap-1 rounded font-medium text-xs px-2 py-0.5"
@@ -1195,6 +1252,9 @@ function ItemDetailPage({
               <StatusBadge status={vm.status}/>
             </div>
             <h1 className="text-xl font-bold text-foreground leading-tight mb-1 break-words">{vm.title}</h1>
+            {vm.releaseYear != null && (
+              <p className="text-sm text-muted-foreground mb-1">{vm.releaseYear}</p>
+            )}
             <div className="mb-2"><StarRating rating={displayDetailRating(vm.rating)}/></div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Layers size={12}/><span>Collection: </span>
@@ -1216,7 +1276,9 @@ function ItemDetailPage({
 
       <div className="bg-card border border-border rounded-2xl p-5 mb-4">
         <h3 className="text-sm font-semibold text-foreground mb-2">줄거리</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">등록된 상세 설명이 없습니다.</p>
+        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${vm.synopsis ? "text-foreground" : "text-muted-foreground"}`}>
+          {vm.synopsis ?? "등록된 상세 설명이 없습니다."}
+        </p>
       </div>
 
       {/* Actions */}
@@ -1505,13 +1567,19 @@ function HomePage({ setPage, openAddItem, openItemDetail }: {
                     }
                   }}
                   className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer">
-                  {/* Placeholder poster — Legacy items have no poster_path */}
-                  <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
-                    style={{ backgroundColor: item.presentation.color }}>
-                    {item.title.charAt(0)}
-                  </div>
+                  <ContentPoster
+                    src={item.posterUrl}
+                    title={item.title}
+                    fallbackColor={item.presentation.color}
+                    size="xs"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-foreground truncate">{item.title}</div>
+                    {formatReleaseYearMeta(item.releaseYear) && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {formatReleaseYearMeta(item.releaseYear)}
+                      </div>
+                    )}
                     <div className="mt-0.5">
                       <span className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
                         style={{ backgroundColor: item.presentation.bgColor, color: item.presentation.color }}>
@@ -1723,13 +1791,22 @@ function ItemsPage({
           aria-label={`${item.title} 선택`}
           className="w-3.5 h-3.5 flex-shrink-0 cursor-pointer accent-primary"
         />
-        <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
-          style={{ backgroundColor: item.presentation.color }}>
-          {item.title.charAt(0)}
-        </div>
+        <ContentPoster
+          src={item.posterUrl}
+          title={item.title}
+          fallbackColor={item.presentation.color}
+          size="xs"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <div className="font-medium text-foreground text-sm leading-snug truncate group-hover:text-primary transition-colors">{item.title}</div>
+            <div className="min-w-0">
+              <div className="font-medium text-foreground text-sm leading-snug truncate group-hover:text-primary transition-colors">{item.title}</div>
+              {formatReleaseYearMeta(item.releaseYear) && (
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  {formatReleaseYearMeta(item.releaseYear)}
+                </div>
+              )}
+            </div>
             <button onClick={e=>{ e.stopPropagation(); }} className="text-muted-foreground flex-shrink-0 hover:text-foreground">
               <MoreVertical size={14}/>
             </button>
@@ -1944,13 +2021,20 @@ function ItemsPage({
                           <input type="checkbox" checked={selected.has(item.id)} onChange={()=>toggleSelect(item.id)} className="accent-primary"/>
                         </td>
                         <td className="px-3 py-3 w-12">
-                          <div className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
-                            style={{ backgroundColor: item.presentation.color }}>
-                            {item.title.charAt(0)}
-                          </div>
+                          <ContentPoster
+                            src={item.posterUrl}
+                            title={item.title}
+                            fallbackColor={item.presentation.color}
+                            size="xs"
+                          />
                         </td>
                         <td className="px-3 py-3 font-medium text-foreground max-w-xs">
                           <div className="truncate">{item.title}</div>
+                          {formatReleaseYearMeta(item.releaseYear) && (
+                            <div className="text-[10px] text-muted-foreground font-normal mt-0.5">
+                              {formatReleaseYearMeta(item.releaseYear)}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-3">
                           <span className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
@@ -2894,14 +2978,19 @@ function CollectionDetailInline({
                   }}
                   className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer"
                 >
-                  <div
-                    className="w-10 h-14 text-base rounded-lg flex items-center justify-center flex-shrink-0 text-white font-bold"
-                    style={{ backgroundColor: item.presentation.color }}
-                  >
-                    {item.title.charAt(0)}
-                  </div>
+                  <ContentPoster
+                    src={item.posterUrl}
+                    title={item.title}
+                    fallbackColor={item.presentation.color}
+                    size="xs"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-foreground text-sm truncate">{item.title}</div>
+                    {formatReleaseYearMeta(item.releaseYear) && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {formatReleaseYearMeta(item.releaseYear)}
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span
                         className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"

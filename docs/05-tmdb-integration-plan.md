@@ -1,15 +1,16 @@
 # 05. TMDB Integration Plan
 
-> **상태:** TMDB-1 Backend 기반 + **TMDB-2 Frontend 실검색·상세·`POST /items/from-tmdb` 등록** 완료.  
-> **범위:** TMDB 기반 영화·TV 검색·상세 및 Item 등록  
-> **비범위 (잔여):** Legacy 7,202건 자동 매칭·Backfill, Trailer/Watch Provider, 추천 History 연동
+> **상태:** TMDB-1 Backend 기반 + TMDB-2 Frontend 실검색·등록 + **TMDB-3 Item `release_year`·`poster_url`/`backdrop_url` 표시** 완료.
+> **범위:** TMDB 기반 영화·TV 검색·상세 및 Item 등록, Item 이미지·출시년도 표시
+> **비범위 (잔여):** Legacy 7,202건 자동 매칭·Backfill, Trailer/Watch Provider, 추천 History 연동, NAV-1
 
-## 0. TMDB-1 / TMDB-2 범위 구분
+## 0. TMDB-1 / TMDB-2 / TMDB-3 범위 구분
 
 | 단계 | 포함 | 제외 |
 | --- | --- | --- |
 | **TMDB-1 (완료)** | Settings·Secret 안전 처리, Async TMDB Client, Status/Search/Details API, 응답 정규화, Image URL, Item 외부 식별 컬럼·Partial Unique Index, Migration `0005`, Mock 테스트 | Frontend 검색 UI 연결, Item 등록 API (당시), Legacy Backfill |
 | **TMDB-2 (완료)** | Frontend 검색·상세·등록 UI, `POST /items/from-tmdb`, 서버 TMDB Detail 재조회, 중복 409(`TMDB_ITEM_ALREADY_EXISTS`) | Legacy 자동 매칭 |
+| **TMDB-3 (완료)** | `items.release_year`, `items.synopsis`, Migration `0006`, 수동 Create/Update 연도·줄거리, TMDB Movie/TV 연도·overview 매핑, Item `poster_url`/`backdrop_url` 파생 응답, 목록·상세·Collection·Home Poster·연도 UI, Item 상세 줄거리 | Legacy Backfill, 이미지 다운로드/업로드, NAV-1 |
 
 ### 구현 API
 
@@ -41,6 +42,20 @@
 | `original_language` | `VARCHAR(16)` NULL | |
 | `poster_path` / `backdrop_path` | `VARCHAR(500)` NULL | 상대 경로 |
 | `external_metadata_updated_at` | timestamptz NULL | |
+
+### Item 출시년도·줄거리·이미지 응답 (TMDB-3 Migration `0006_add_item_year_synopsis`)
+
+| 필드 | 타입 | 비고 |
+| --- | --- | --- |
+| `release_year` | `INTEGER` NULL | DB에는 연도만. Check `ck_items_release_year_range` (`NULL` 또는 `1000–9999`) |
+| `synopsis` | `TEXT` NULL | TMDB `overview` 줄거리. `memo`/`progress_note`와 분리 |
+| `poster_url` / `backdrop_url` | 응답 전용 | `external_source=tmdb`이고 path가 있을 때만 순수 문자열로 생성. Configuration 네트워크 호출 없음 |
+
+- Movie: TMDB `release_date` → `release_year` / TV: `first_air_date` → `release_year` (`POST /items/from-tmdb`에서 서버 Detail 재조회 결과만 신뢰)
+- Movie·TV: TMDB `overview` → `synopsis` (trim, 빈/공백 → NULL). `TMDB_LANGUAGE=ko-KR` 결과만 사용. 영어 추가 조회 없음
+- 수동 `POST/PATCH /items`에서 `release_year`·`synopsis` 입력·수정·명시적 `null` 삭제 가능
+- Legacy·기존 행은 `release_year=NULL`, `synopsis=NULL`. path 없으면 URL도 `null`. **자동 Backfill·제목 매칭 없음**
+- 실데이터 DB에 대한 `0006` 적용은 별도 Backup·승인 후 (이 Cursor 구현 단계에서는 미적용)
 
 - Check: 세 식별 필드 모두 NULL 또는 모두 NOT NULL  
 - Unique: `uq_items_user_external_identity` on `(user_id, external_source, external_media_type, external_id)` WHERE `external_id IS NOT NULL`  
@@ -460,13 +475,14 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 - 추천 후보 쿼리(존재 Item 전체)에 TMDB Item 포함 정상
 - Import·보정 CLI 무변경
 
-## 15. TMDB-2 이후 잔여
+## 15. TMDB-3 이후 잔여
 
 - Legacy 데이터 TMDB 자동 매칭·Backfill
-- 기존 7,202 Item 수정
+- 기존 7,202 Item 수정·연도/포스터 일괄 갱신
 - 검색·상세 결과 Cache / Redis
 - Trailer·Watch Provider·추천 History
-- 실데이터 DB에 대한 등록 Live Smoke (테스트는 MockTransport·격리 Fixture만)
+- NAV-1 (브라우저·PWA 백버튼)
+- 실데이터·서버에 대한 `0006` Migration 적용 (Backup 후)
 
 ## 16. 관련 문서
 

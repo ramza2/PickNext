@@ -17,6 +17,9 @@ export interface ItemDetailViewModel {
   memo: string | null;
   createdAt: string;
   updatedAt: string;
+    releaseYear: number | null;
+  posterUrl: string | null;
+  synopsis: string | null;
   presentation: CategoryPresentation;
 }
 
@@ -36,6 +39,9 @@ export function mapApiItemDetailToViewModel(
     memo: item.memo,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
+    releaseYear: item.release_year ?? null,
+    posterUrl: item.poster_url ?? null,
+    synopsis: item.synopsis ?? null,
     presentation: getCategoryPresentation(item.category.name),
   };
 }

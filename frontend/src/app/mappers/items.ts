@@ -16,6 +16,8 @@ export interface ItemsListViewModel {
   collectionName: string | null;
   createdAt: string;
   updatedAt: string;
+  releaseYear: number | null;
+  posterUrl: string | null;
   presentation: CategoryPresentation;
 }
 
@@ -34,6 +36,8 @@ export function mapApiItemToItemsListViewModel(
     collectionName: item.collection?.name ?? null,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
+    releaseYear: item.release_year ?? null,
+    posterUrl: item.poster_url ?? null,
     presentation: getCategoryPresentation(item.category.name),
   };
 }

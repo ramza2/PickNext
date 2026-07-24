@@ -38,6 +38,8 @@ function emptyValues(title: string): ItemFormValues {
     rating: 0,
     progressNote: "",
     memo: "",
+    releaseYear: "",
+    synopsis: "",
   };
 }
 
@@ -211,6 +213,16 @@ export function TmdbRegisterForm({
             {fieldErrors.title ? (
               <p className="text-xs text-red-500 mt-1">{fieldErrors.title}</p>
             ) : null}
+          </div>
+
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">출시년도</div>
+            <p className="text-sm text-foreground">
+              {detail.release_year != null ? detail.release_year : "—"}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              TMDB 기준으로 등록되며, 등록 후 항목 수정에서 변경할 수 있습니다.
+            </p>
           </div>
 
           <div>

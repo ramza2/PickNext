@@ -273,6 +273,10 @@ def test_item_detail(api_client: TestClient, catalog_data: dict) -> None:
     assert payload["memo"] is None
     # TMDB-1: external identity fields are present and null for Legacy items
     assert payload["poster_path"] is None
+    assert payload["poster_url"] is None
+    assert payload["backdrop_url"] is None
+    assert payload["release_year"] is None
+    assert payload["synopsis"] is None
     assert payload["external_source"] is None
     assert payload["external_id"] is None
     assert payload["external_media_type"] is None

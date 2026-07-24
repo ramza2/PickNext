@@ -8,6 +8,8 @@ export const ITEM_CATEGORY_EMPTY_LIST_ERROR =
   "항목을 추가하려면 먼저 카테고리가 필요합니다.";
 export const ITEM_PROGRESS_NOTE_TOO_LONG_ERROR =
   "진행 상황은 200자 이하여야 합니다.";
+export const ITEM_RELEASE_YEAR_INVALID_ERROR =
+  "출시년도는 4자리 숫자로 입력해 주세요.";
 export const ITEM_WRITE_VALIDATION_ERROR =
   "입력한 항목 정보를 확인해 주세요.";
 export const ITEM_RELATED_NOT_FOUND_ERROR =
@@ -47,6 +49,29 @@ export function validateProgressNote(normalizedNote: string | null): string | nu
     return ITEM_PROGRESS_NOTE_TOO_LONG_ERROR;
   }
   return null;
+}
+
+/** Empty input → null. Otherwise must be 1000–9999 integer text. */
+export function parseReleaseYearInput(raw: string): {
+  value: number | null;
+  error: string | null;
+} {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { value: null, error: null };
+  }
+  if (!/^\d{4}$/.test(trimmed)) {
+    return { value: null, error: ITEM_RELEASE_YEAR_INVALID_ERROR };
+  }
+  const year = Number(trimmed);
+  if (year < 1000 || year > 9999) {
+    return { value: null, error: ITEM_RELEASE_YEAR_INVALID_ERROR };
+  }
+  return { value: year, error: null };
+}
+
+export function validateReleaseYearInput(raw: string): string | null {
+  return parseReleaseYearInput(raw).error;
 }
 
 export function itemCreateFailureToast(): string {
@@ -119,9 +144,13 @@ export interface ItemFormValues {
   rating: number;
   progressNote: string;
   memo: string;
+  /** Raw form text; empty means null. */
+  releaseYear: string;
+  synopsis: string;
 }
 
 export function buildItemCreatePayload(values: ItemFormValues): ItemCreatePayload {
+  const release = parseReleaseYearInput(values.releaseYear);
   return {
     title: normalizeItemTitleInput(values.title),
     category_id: values.categoryId,
@@ -130,6 +159,8 @@ export function buildItemCreatePayload(values: ItemFormValues): ItemCreatePayloa
     rating: values.rating,
     progress_note: normalizeNullableText(values.progressNote),
     memo: normalizeNullableText(values.memo),
+    release_year: release.value,
+    synopsis: normalizeNullableText(values.synopsis),
   };
 }
 
@@ -141,7 +172,11 @@ export function buildItemUpdatePayload(
   const title = normalizeItemTitleInput(values.title);
   const progressNote = normalizeNullableText(values.progressNote);
   const memo = normalizeNullableText(values.memo);
+  const synopsis = normalizeNullableText(values.synopsis);
   const sourceCollectionId = source.collection?.id ?? null;
+  const release = parseReleaseYearInput(values.releaseYear);
+  const sourceYear = source.release_year ?? null;
+  const sourceSynopsis = source.synopsis ?? null;
 
   if (title !== source.title) payload.title = title;
   if (values.categoryId !== source.category.id) {
@@ -156,6 +191,12 @@ export function buildItemUpdatePayload(
     payload.progress_note = progressNote;
   }
   if (memo !== source.memo) payload.memo = memo;
+  if (release.value !== sourceYear) {
+    payload.release_year = release.value;
+  }
+  if (synopsis !== sourceSynopsis) {
+    payload.synopsis = synopsis;
+  }
 
   return payload;
 }
@@ -169,6 +210,9 @@ export function itemFormValuesFromDetail(item: ApiItemDetail): ItemFormValues {
     rating: item.rating,
     progressNote: item.progress_note ?? "",
     memo: item.memo ?? "",
+    releaseYear:
+      typeof item.release_year === "number" ? String(item.release_year) : "",
+    synopsis: item.synopsis ?? "",
   };
 }
 
@@ -176,6 +220,7 @@ export type ItemFormFieldErrors = {
   title?: string;
   categoryId?: string;
   progressNote?: string;
+  releaseYear?: string;
   form?: string;
 };
 
@@ -200,12 +245,18 @@ export function collectItemFormFieldErrors(
     normalizeNullableText(values.progressNote),
   );
   if (progressError) errors.progressNote = progressError;
+  const yearError = validateReleaseYearInput(values.releaseYear);
+  if (yearError) errors.releaseYear = yearError;
   return errors;
 }
 
 export function hasItemFormFieldErrors(errors: ItemFormFieldErrors): boolean {
   return Boolean(
-    errors.title || errors.categoryId || errors.progressNote || errors.form,
+    errors.title
+    || errors.categoryId
+    || errors.progressNote
+    || errors.releaseYear
+    || errors.form,
   );
 }
 
@@ -220,6 +271,7 @@ export function validateItemFormValues(
     ?? errors.title
     ?? errors.categoryId
     ?? errors.progressNote
+    ?? errors.releaseYear
     ?? null
   );
 }

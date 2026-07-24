@@ -154,6 +154,10 @@ class Item(Base, TimestampMixin):
             """,
             name="ck_items_external_identity_all_or_none",
         ),
+        CheckConstraint(
+            "release_year IS NULL OR (release_year >= 1000 AND release_year <= 9999)",
+            name="ck_items_release_year_range",
+        ),
         Index("ix_items_user_id_category_id", "user_id", "category_id"),
         Index("ix_items_user_id_status", "user_id", "status"),
         Index(
@@ -207,6 +211,8 @@ class Item(Base, TimestampMixin):
     original_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     poster_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     backdrop_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    release_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    synopsis: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_metadata_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
