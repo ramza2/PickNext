@@ -90,9 +90,14 @@ docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml down --rem
 docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml build frontend
 docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml up -d
 
-# Migration · Seed (격리 DB에만)
-docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml exec backend alembic upgrade head
-docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml exec backend python -m app.services.seed
+# Migration · Seed (격리 DB에만 — postgres healthy 후, frontend 공개 전)
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml up -d postgres
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml \
+  run --rm --no-deps backend alembic upgrade head
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml \
+  run --rm --no-deps backend \
+  python -c "from app.services.seed import run_seed; print(run_seed())"
+docker compose -p picknext-dpl2 -f compose.yaml -f compose.local.yaml up -d
 
 # Smoke
 curl -i http://127.0.0.1:5183/health
@@ -127,15 +132,47 @@ Local Override 기본 Host Port (모두 `127.0.0.1`):
 | PostgreSQL | `default` only · proxy·Traefik Label·Host Port 없음 |
 | StripPrefix | **없음** (Backend가 `/api/v1`을 그대로 수신) |
 
-Production 실행 (원격):
+Production 실행 (원격 Git checkout, `compose.local.yaml`과 동시 사용 금지):
 
 ```bash
-# compose.local.yaml과 동시 사용 금지
+# 1) .env.dpl3 준비 (POSTGRES_HOST=postgres, PICKNEXT_HOST, CORS_ORIGINS 등)
+#    compose.yaml의 env_file: .env 용으로 symlink
+ln -sfn .env.dpl3 .env
+chmod 600 .env.dpl3
+
+# 2) 설정 검증
 docker compose --env-file .env.dpl3 -p picknext-dpl3 \
   -f compose.yaml -f compose.traefik.yaml config --quiet
+
+# 3) Build
 docker compose --env-file .env.dpl3 -p picknext-dpl3 \
-  -f compose.yaml -f compose.traefik.yaml up -d
+  -f compose.yaml -f compose.traefik.yaml build
+
+# 4) PostgreSQL만 기동 → Migration → Seed → Backend/Frontend
+#    (공개 서비스보다 DB 초기화가 먼저여야 함)
+docker compose --env-file .env.dpl3 -p picknext-dpl3 \
+  -f compose.yaml -f compose.traefik.yaml up -d postgres
+
+docker compose --env-file .env.dpl3 -p picknext-dpl3 \
+  -f compose.yaml -f compose.traefik.yaml \
+  run --rm --no-deps backend alembic upgrade head
+
+docker compose --env-file .env.dpl3 -p picknext-dpl3 \
+  -f compose.yaml -f compose.traefik.yaml \
+  run --rm --no-deps backend \
+  python -c "from app.services.seed import run_seed; print(run_seed())"
+
+docker compose --env-file .env.dpl3 -p picknext-dpl3 \
+  -f compose.yaml -f compose.traefik.yaml up -d backend frontend
 ```
+
+또는 저장소 루트에서:
+
+```bash
+bash scripts/dpl3-remote-deploy.sh
+```
+
+Migration/Seed 실패 시 Backend·Frontend를 기동하지 않습니다. Seed 진입점은 `app.services.seed.run_seed`만 사용합니다.
 
 Local 실행: `compose.yaml` + `compose.traefik.yaml`이 아니라 `compose.yaml` + `compose.local.yaml`만 사용합니다.
 
