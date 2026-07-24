@@ -242,11 +242,19 @@ cd "$DEPLOY_ROOT"
 [[ -f "$ENV_FILE" ]] || die "$ENV_FILE missing"
 
 info "git working tree"
-if [[ -n "$(git status --short)" ]]; then
-  git status --short
-  die "Git working tree is not clean. Commit or stash before apply."
+# .env.dpl3 / .env are expected local secrets (must not be committed).
+# Other dirty tracked files still block apply.
+GIT_DIRTY="$(
+  git status --short --untracked-files=all |
+    grep -Ev '^\?\? \.env(\.dpl3)?$' |
+    grep -Ev '^!! ' ||
+    true
+)"
+if [[ -n "${GIT_DIRTY}" ]]; then
+  echo "${GIT_DIRTY}"
+  die "Git working tree has unexpected changes. Reset or stash them, then re-run. (.env / .env.dpl3 alone are allowed.)"
 fi
-echo "git_clean=true"
+echo "git_clean=true (secrets env files ignored)"
 echo "git_head=$(git rev-parse --short HEAD)"
 
 info "docker / compose"
