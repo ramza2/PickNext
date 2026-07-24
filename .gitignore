@@ -55,6 +55,14 @@ frontend/PickNext.zip
 *.log
 postgres-data/
 
+# DB transfer / restore artifacts (never commit dumps)
+/db-transfer/
+/backups/
+*.dump
+*.backup
+*.sql.gz
+*.manifest.env
+
 # Legacy personal data & dry-run reports (do not commit)
 legacy-data/*.json
 migration-report/
