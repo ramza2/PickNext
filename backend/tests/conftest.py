@@ -1,4 +1,11 @@
 from collections.abc import Generator
+import os
+
+# Required before Settings() for any test importing the app.
+os.environ.setdefault(
+    "AUTH_CODE_PEPPER",
+    "test-auth-code-pepper-not-for-production",
+)
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +17,8 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.main import create_app
 from app.models import User
+
+get_settings.cache_clear()
 
 
 @pytest.fixture(scope="session")
@@ -71,3 +80,14 @@ def user(db: Session) -> User:
     db.add(entity)
     db.flush()
     return entity
+
+
+@pytest.fixture
+def fake_email_sender():
+    from app.api.deps import set_email_sender_override
+    from app.services.email import FakeEmailSender
+
+    sender = FakeEmailSender()
+    set_email_sender_override(sender)
+    yield sender
+    set_email_sender_override(None)

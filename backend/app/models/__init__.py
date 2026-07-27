@@ -58,6 +58,21 @@ class TimestampMixin:
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            """
+            login_id IS NULL
+            OR login_id ~ '^[a-z0-9][a-z0-9._-]{3,29}$'
+            """,
+            name="ck_users_login_id_format",
+        ),
+        Index(
+            "uq_users_login_id",
+            "login_id",
+            unique=True,
+            postgresql_where=text("login_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -68,11 +83,24 @@ class User(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    login_id: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     categories: Mapped[list["Category"]] = relationship(back_populates="user")
     collections: Mapped[list["Collection"]] = relationship(back_populates="user")
     items: Mapped[list["Item"]] = relationship(back_populates="user")
     recommendation_histories: Mapped[list["RecommendationHistory"]] = relationship(
+        back_populates="user"
+    )
+    sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
+    verification_codes: Mapped[list["AuthVerificationCode"]] = relationship(
         back_populates="user"
     )
 
@@ -447,3 +475,88 @@ class LegacyImportCollection(Base):
 
     import_run: Mapped[LegacyImportRun] = relationship(back_populates="collections")
     collection: Mapped[Collection] = relationship()
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_user_sessions_expires_at", "expires_at"),
+        Index("ix_user_sessions_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    is_persistent: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class AuthVerificationCode(Base):
+    __tablename__ = "auth_verification_codes"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('SIGNUP', 'FIND_LOGIN_ID', 'RESET_PASSWORD')",
+            name="ck_auth_verification_codes_purpose",
+        ),
+        Index("ix_auth_verification_codes_purpose_email", "purpose", "email"),
+        Index("ix_auth_verification_codes_purpose_login_id", "purpose", "login_id"),
+        Index("ix_auth_verification_codes_expires_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    login_id: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    user: Mapped[User | None] = relationship(back_populates="verification_codes")

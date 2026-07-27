@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -37,6 +37,27 @@ class Settings(BaseSettings):
     seed_user_display_name: str = "Dev User"
     seed_user_password: str = "dev-password-change-me"
 
+    # Auth session / verification (AUTH_CODE_PEPPER has no insecure default).
+    auth_cookie_name: str = "picknext_session"
+    auth_session_ttl_hours: int = 12
+    auth_remember_ttl_days: int = 30
+    auth_code_ttl_minutes: int = 10
+    auth_code_resend_seconds: int = 60
+    auth_code_max_attempts: int = 5
+    auth_code_pepper: SecretStr
+    auth_cookie_secure: bool = False
+
+    # SMTP — secrets never logged or returned in API responses.
+    smtp_host: str = "smtp.naver.com"
+    smtp_port: int = 465
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from_email: str | None = None
+    smtp_from_name: str = "PickNext"
+    smtp_use_tls: bool = False
+    smtp_use_ssl: bool = True
+    smtp_timeout_seconds: float = 30.0
+
     # TMDB — secrets never logged; Read Access Token preferred over API Key.
     tmdb_api_key: SecretStr | None = None
     tmdb_api_read_access_token: SecretStr | None = None
@@ -50,14 +71,34 @@ class Settings(BaseSettings):
     tmdb_backdrop_size: str = "w780"
     tmdb_profile_size: str = "w185"
 
-    @field_validator("tmdb_api_key", "tmdb_api_read_access_token", mode="before")
+    @field_validator("tmdb_api_key", "tmdb_api_read_access_token", "smtp_password", mode="before")
     @classmethod
-    def empty_tmdb_secret_as_none(cls, value: object) -> object:
+    def empty_secret_as_none(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("smtp_username", "smtp_from_email", mode="before")
+    @classmethod
+    def empty_str_as_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def validate_smtp_flags(self) -> Self:
+        if self.smtp_use_ssl and self.smtp_use_tls:
+            raise ValueError("SMTP_USE_SSL and SMTP_USE_TLS cannot both be true")
+        if not (1 <= self.smtp_port <= 65535):
+            raise ValueError("SMTP_PORT must be between 1 and 65535")
+        if self.smtp_timeout_seconds <= 0:
+            raise ValueError("SMTP_TIMEOUT_SECONDS must be positive")
+        pepper = self.auth_code_pepper.get_secret_value().strip()
+        if len(pepper) < 16:
+            raise ValueError("AUTH_CODE_PEPPER must be a long random secret")
+        return self
 
     @property
     def tmdb_auth_mode(self) -> Literal["bearer", "api_key", "none"]:

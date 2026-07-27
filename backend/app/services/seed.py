@@ -60,6 +60,11 @@ def get_or_create_seed_user(db: Session) -> User:
     return user
 
 
+def ensure_default_categories_for_user(db: Session, user: User) -> tuple[int, int]:
+    """Create DEFAULT_CATEGORIES for one user without running full seed."""
+    return seed_categories(db, user)
+
+
 def seed_categories(db: Session, user: User) -> tuple[int, int]:
     """Return (created_count, existing_count)."""
     created = 0

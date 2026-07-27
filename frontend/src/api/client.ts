@@ -14,6 +14,28 @@ export class ApiError extends Error {
   }
 }
 
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/** Register a handler for 401 on protected API calls (not public auth routes). */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+const PUBLIC_AUTH_PATH_PREFIXES = [
+  "/auth/login",
+  "/auth/me",
+  "/auth/signup/",
+  "/auth/find-id/",
+  "/auth/password-reset/",
+] as const;
+
+function isPublicAuthPath(path: string): boolean {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return PUBLIC_AUTH_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 function joinUrl(base: string, path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalizedPath}`;
@@ -60,7 +82,11 @@ export async function apiRequest<T>(
 
   let response: Response;
   try {
-    response = await fetch(url, { ...options, headers });
+    response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: "include",
+    });
   } catch (err) {
     const message =
       err instanceof Error && err.name === "AbortError"
@@ -91,6 +117,10 @@ export async function apiRequest<T>(
     } catch {
       detail = undefined;
     }
+  }
+
+  if (response.status === 401 && !isPublicAuthPath(path) && unauthorizedHandler) {
+    unauthorizedHandler();
   }
 
   throw new ApiError(

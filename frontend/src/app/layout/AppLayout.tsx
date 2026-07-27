@@ -37,6 +37,8 @@ interface AppLayoutProps {
   onNavigate: (page: Page) => void;
   onAddItem: () => void;
   children: ReactNode;
+  loginId?: string | null;
+  onLogout?: () => void;
 }
 
 export default function AppLayout({
@@ -44,6 +46,8 @@ export default function AppLayout({
   onNavigate,
   onAddItem,
   children,
+  loginId,
+  onLogout,
 }: AppLayoutProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const navTo = (p: Page) => {
@@ -67,6 +71,11 @@ export default function AppLayout({
               <div className="text-[10px] text-muted-foreground leading-tight">고민하지 말고, 다음 선택은</div>
             </div>
           </div>
+          {loginId && (
+            <div className="mt-3 text-xs text-muted-foreground truncate" title={loginId}>
+              {loginId}
+            </div>
+          )}
         </div>
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
           {NAV.map((item) => (
@@ -87,6 +96,17 @@ export default function AppLayout({
             </button>
           ))}
         </nav>
+        {onLogout && (
+          <div className="px-3 py-3 border-t border-sidebar-border">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="w-full text-left text-xs text-muted-foreground hover:text-foreground px-3 py-2 rounded-xl hover:bg-sidebar-accent/50"
+            >
+              로그아웃
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Content */}
@@ -103,6 +123,11 @@ export default function AppLayout({
             <span className="lg:hidden text-sm font-semibold text-foreground">{title}</span>
           </div>
           <div className="flex items-center gap-2">
+            {loginId && (
+              <span className="hidden sm:inline text-xs text-muted-foreground max-w-[8rem] truncate">
+                {loginId}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => navTo("search")}

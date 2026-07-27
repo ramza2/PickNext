@@ -84,7 +84,20 @@ import {
   type ItemFormFieldErrors,
   type ItemFormValues,
 } from "../api/itemWriteMessages";
-import { ApiError } from "../api/client";
+import { ApiError, setUnauthorizedHandler } from "../api/client";
+import {
+  fetchAuthMe,
+  logout as apiLogout,
+} from "../api/auth";
+import type { AuthUser } from "../types/auth";
+import {
+  AuthLoadingSplash,
+  FindIdView,
+  LoginView,
+  PasswordResetView,
+  SignupView,
+  type AuthView,
+} from "./auth/AuthScreens";
 import {
   collectionDeleteErrorMessage,
   itemDeleteErrorMessage,
@@ -3158,10 +3171,39 @@ function CollectionDetailInline({
 
 // ─── Settings Page ────────────────────────────────────────────────────────────
 
-function SettingsPage({ setPage }: { setPage: (p: Page) => void }) {
+function SettingsPage({
+  setPage,
+  authUser,
+  onLogout,
+}: {
+  setPage: (p: Page) => void;
+  authUser: AuthUser | null;
+  onLogout: () => void;
+}) {
   return (
     <div className="max-w-xl mx-auto px-4 sm:px-6 py-6 space-y-4">
       <h1 className="text-xl font-bold text-foreground mb-5">설정</h1>
+      {authUser && (
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+          <div>
+            <div className="text-xs text-muted-foreground">아이디</div>
+            <div className="text-sm font-medium text-foreground">
+              {authUser.login_id ?? "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">이메일</div>
+            <div className="text-sm font-medium text-foreground">{authUser.email}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="w-full rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-muted"
+          >
+            로그아웃
+          </button>
+        </div>
+      )}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <button onClick={() => setPage("category-manage")}
           className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/40 transition-colors text-left">
@@ -3191,6 +3233,11 @@ interface ItemDetailSelection {
 }
 
 export default function App() {
+  const [authStatus, setAuthStatus] = useState<"loading" | "authenticated" | "unauthenticated">(
+    "loading",
+  );
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authView, setAuthView] = useState<AuthView>("login");
   const [page, setPage]               = useState<Page>("home");
   const [itemDetailSelection, setItemDetailSelection] =
     useState<ItemDetailSelection | null>(null);
@@ -3211,6 +3258,50 @@ export default function App() {
     setToast(msg);
     setTimeout(() => setToast(null), 2800);
   }, []);
+
+  const clearProtectedState = useCallback(() => {
+    setPage("home");
+    setItemDetailSelection(null);
+    setItemsSnapshot(null);
+    setCollectionsSnapshot(null);
+    setSearchSnapshot(null);
+    setCollectionDetailSelection(null);
+    setItemFormSession(null);
+    setItemWriteBusy(false);
+    setToast(null);
+    setAuthUser(null);
+    setAuthStatus("unauthenticated");
+    setAuthView("login");
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const me = await fetchAuthMe(controller.signal);
+        if (controller.signal.aborted) return;
+        setAuthUser(me);
+        setAuthStatus("authenticated");
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (err instanceof ApiError && (err.status === 401 || err.status === 0)) {
+          setAuthUser(null);
+          setAuthStatus("unauthenticated");
+          return;
+        }
+        setAuthUser(null);
+        setAuthStatus("unauthenticated");
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearProtectedState();
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [clearProtectedState]);
 
   useEffect(() => {
     if (HIDDEN_PAGES.has(page)) {
@@ -3427,6 +3518,15 @@ export default function App() {
     showToast(ITEM_NOT_FOUND_TOAST);
   }, [showToast]);
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await apiLogout();
+    } catch {
+      // Cookie/session may already be gone — still clear local state.
+    }
+    clearProtectedState();
+  }, [clearProtectedState]);
+
   const navigateFromLayout = useCallback((next: Page) => {
     if (HIDDEN_PAGES.has(next)) {
       setPage("home");
@@ -3496,7 +3596,14 @@ export default function App() {
             itemWriteBusy={itemWriteBusy || Boolean(itemFormSession)}
           />
         );
-      case "settings":       return <SettingsPage setPage={setPage}/>;
+      case "settings":
+        return (
+          <SettingsPage
+            setPage={setPage}
+            authUser={authUser}
+            onLogout={() => void handleLogout()}
+          />
+        );
       case "item-detail":
         return (
           <ItemDetailPage
@@ -3521,9 +3628,41 @@ export default function App() {
     }
   };
 
+  if (authStatus === "loading") {
+    return <AuthLoadingSplash />;
+  }
+
+  if (authStatus === "unauthenticated") {
+    if (authView === "signup") {
+      return <SignupView onNavigate={setAuthView} />;
+    }
+    if (authView === "find-id") {
+      return <FindIdView onNavigate={setAuthView} />;
+    }
+    if (authView === "password-reset") {
+      return <PasswordResetView onNavigate={setAuthView} />;
+    }
+    return (
+      <LoginView
+        onNavigate={setAuthView}
+        onLoggedIn={(user) => {
+          setAuthUser(user);
+          setAuthStatus("authenticated");
+          setPage("home");
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AppLayout currentPage={page} onNavigate={navigateFromLayout} onAddItem={() => openCreateItem()}>
+      <AppLayout
+        currentPage={page}
+        onNavigate={navigateFromLayout}
+        onAddItem={() => openCreateItem()}
+        loginId={authUser?.login_id ?? null}
+        onLogout={() => void handleLogout()}
+      >
         {renderPage()}
       </AppLayout>
 

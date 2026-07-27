@@ -227,7 +227,7 @@ docker compose exec backend python -m app.services.seed
 bash scripts/seed.sh
 ```
 
-Seed 사용자 기본값(`.env`로 변경 가능):
+Seed 사용자 기본값(`.env`로 변경 가능). **Runtime API 현재 사용자는 Session Cookie로 결정되며, `SEED_*`는 Seed CLI/bootstrap 전용입니다.**
 
 | 변수 | 기본값 |
 | --- | --- |
@@ -236,6 +236,26 @@ Seed 사용자 기본값(`.env`로 변경 가능):
 | `SEED_USER_PASSWORD` | `dev-password-change-me` |
 
 같은 명령을 여러 번 실행해도 카테고리는 중복 생성되지 않습니다.
+
+### 인증 (AUTH-1)
+
+자체 계정 · DB Session Cookie (`picknext_session`) · Argon2id. 설계: [`docs/11-authentication-plan.md`](docs/11-authentication-plan.md).
+
+필수 설정: `AUTH_CODE_PEPPER`(긴 임의 문자열). SMTP는 Naver SSL 465 (`SMTP_USE_SSL=true`).
+
+기존 사용자 자격정보 (Migration 후 수동):
+
+```bash
+docker compose exec backend python -m app.cli.set_user_credentials --email <email>
+```
+
+SMTP 연결 확인 (승인 후 수동 1회):
+
+```bash
+docker compose exec backend python -m app.cli.test_smtp --to <address>
+```
+
+비밀번호·인증번호·Token·SMTP 비밀번호는 로그·문서에 출력하지 않습니다.
 
 ## Legacy Dry-run (movie.json 분석)
 
@@ -369,36 +389,45 @@ pytest -q
 | `DATABASE_URL` | 선택. 설정 시 개별 `POSTGRES_*`보다 우선 |
 | `BACKEND_PORT` | Backend 노출 포트 |
 | `POSTGRES_PUBLISH_PORT` | PostgreSQL 노출 포트 |
-| `SEED_USER_*` | Seed 사용자 정보 |
+| `SEED_USER_*` | Seed CLI/bootstrap 사용자 정보 (Runtime current user 아님) |
+| `AUTH_COOKIE_NAME` | Session Cookie 이름 (기본 `picknext_session`) |
+| `AUTH_SESSION_TTL_HOURS` | 일반 로그인 서버 TTL (기본 12) |
+| `AUTH_REMEMBER_TTL_DAYS` | 자동 로그인 TTL (기본 30) |
+| `AUTH_CODE_*` | 인증번호 TTL·재발송·시도 횟수 |
+| `AUTH_CODE_PEPPER` | 인증번호 HMAC Secret (**필수**, 커밋 금지) |
+| `AUTH_COOKIE_SECURE` | Secure Cookie (로컬 false · 운영 true) |
+| `SMTP_*` | 이메일 발송 (Naver SSL 465 권장) |
 
 `.env`는 커밋하지 않습니다. `.env.example`만 저장소에 포함합니다.
 
 ## 현재 구현 범위
 
 - Monorepo 골격 + Figma Make Frontend 기준선
-- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0006`)
+- SQLAlchemy 도메인 모델, Alembic Migration (`0001`~`0007`)
 - 개발용 Seed (멱등), Health Check API
 - Docker Compose (`backend`, `postgres`, `frontend`)
 - Legacy Dry-run / Import / 보정 CLI
 - Category·Item·Collection 읽기·쓰기 API
 - TMDB: `GET /tmdb/status|search|details/...`, `POST /items/from-tmdb`
+- **AUTH-1:** Session Cookie 인증 · 회원가입/복구 · Frontend Auth UI
 - Frontend Home·Items·Collections·Item Detail·TMDB Search 실연동
 
 ## 이번 범위에서 제외
 
-- 인증·로그인
+- Google/Firebase/OAuth/JWT
 - Category 쓰기 CRUD UI
 - 랜덤 추천·선택·이력 API/UI
 - Legacy TMDB 자동 매칭·Backfill
 - Traefik ACME·공인 DNS 확정 (DPL-4)
+- AUTH-1 실DB/운영 Migration·실제 SMTP (별도 승인)
 
 ## 다음 개발 단계
 
-1. Collection 목록·상세 읽기 API 계약 및 Backend 구현
-2. Category·Item·Collection CRUD API
-3. 랜덤 추천 및 `이걸로 선택` 이력 API
-4. TMDB Legacy 자동 매칭·Backfill (선택)
-5. Traefik ACME·공인 DNS 확정 (DPL-4) 및 운영 배포
+1. AUTH-1 로컬·운영 적용 (Backup · Migration · Credential CLI · SMTP QA)
+2. 랜덤 추천 및 `이걸로 선택` 이력 API (REC-1)
+3. 브라우저·PWA 백버튼 (NAV-1)
+4. Legacy TMDB 자동 매칭·Backfill (선택)
+5. Traefik ACME·공인 DNS 확정 (DPL-4)
 
 설계 문서는 `docs/`를 참고하세요.
 
@@ -410,4 +439,5 @@ pytest -q
 | `docs/04-legacy-migration.md` | Legacy Import·보정 |
 | `docs/05-tmdb-integration-plan.md` | TMDB 검색·등록 기획 |
 | `docs/06-frontend-integration-plan.md` | Figma Frontend 분석·API 연동 계획 |
-| `docs/07-read-api-contract.md` | Category·Item 조회 API 계약·구현 (Phase A-1) |
+| `docs/07-read-api-contract.md` | Category·Item 조회 API 계약·구현 |
+| `docs/11-authentication-plan.md` | 자체 계정 인증 (AUTH-1) |

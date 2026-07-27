@@ -418,3 +418,11 @@ SearchPage
 - TMDB `overview` → Item `synopsis` (trim, 빈값 NULL). `memo`/`progress_note`와 분리. 기존 Item Backfill 없음.
 - 수동 Item Form 출시년도·줄거리 · UI Poster/연도 (목록·상세·Collection·Home) · Item 상세 줄거리 실데이터 연결 (고정 Placeholder 제거).
 - Legacy NULL·Placeholder 유지. 실데이터 `0006` 적용은 별도 Backup·승인 후.
+
+## Post-Audit Progress (AUTH-1, 2026-07-27)
+
+- Session Cookie (`picknext_session`) + Argon2id + 회원가입/아이디찾기/비밀번호재설정 + Fake SMTP 테스트.
+- Runtime `SEED_USER_EMAIL` current-user 제거 · 모든 사용자 API·TMDB status 인증 필요 · 사용자 격리.
+- Frontend Auth Bootstrap·Auth UI·`credentials:include`·401/로그아웃 State 클리어 · Header/Settings 실제 login_id.
+- Migration `0007_add_auth_tables`는 **격리 DB만** 검증. 실DB/운영·실제 SMTP·Credential CLI는 미적용.
+- 설계 문서: `docs/11-authentication-plan.md`.

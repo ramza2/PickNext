@@ -63,7 +63,9 @@ def _raise_tmdb_http(exc: TmdbError) -> None:
 @router.get("/status", response_model=TmdbStatusResponse)
 async def tmdb_status(
     service: Annotated[TmdbService, Depends(get_tmdb_service)],
+    user: User = Depends(get_current_user),
 ) -> TmdbStatusResponse:
+    _ = user
     return await service.status()
 
 
