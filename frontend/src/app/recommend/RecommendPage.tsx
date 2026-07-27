@@ -20,6 +20,8 @@ import type {
   RecommendationStatusFilter,
 } from "../../types/recommendation";
 import type { RecommendStep } from "../../types/mock";
+import { useAppNavigation } from "../../navigation";
+import type { RecommendSessionCache } from "../../navigation";
 
 function StatusBadge({ status, sm }: { status: ApiItemStatus; sm?: boolean }) {
   return (
@@ -186,23 +188,45 @@ export function RecommendPage({
   onOpenHistory,
   initialCategoryId = null,
 }: RecommendPageProps) {
+  const { cache, bumpCacheVersion } = useAppNavigation();
+  const restored = cache.recommend;
   const categoryLabelId = useId();
   const statusLabelId = useId();
-  const [step, setStep] = useState<RecommendStep>("setup");
+  const [step, setStep] = useState<RecommendStep>(restored?.step ?? "setup");
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
-  const [categoryId, setCategoryId] = useState<string>("");
+  const [categoryId, setCategoryId] = useState<string>(restored?.categoryId ?? "");
   const [statusFilter, setStatusFilter] =
-    useState<RecommendationStatusFilter>("PLANNED");
-  const [result, setResult] = useState<RandomRecommendationResponse | null>(null);
-  const [savedHistoryId, setSavedHistoryId] = useState<string | null>(null);
+    useState<RecommendationStatusFilter>(restored?.statusFilter ?? "PLANNED");
+  const [result, setResult] = useState<RandomRecommendationResponse | null>(
+    restored?.result ?? null,
+  );
+  const [savedHistoryId, setSavedHistoryId] = useState<string | null>(
+    restored?.savedHistoryId ?? null,
+  );
   const [recommendPending, setRecommendPending] = useState(false);
   const [savePending, setSavePending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recommendRequestId = useRef(0);
   const saveRequestId = useRef(0);
+
+  const persistCache = useCallback(
+    (partial: Partial<RecommendSessionCache>) => {
+      const next: RecommendSessionCache = {
+        step,
+        categoryId,
+        statusFilter,
+        result,
+        savedHistoryId,
+        ...partial,
+      };
+      cache.recommend = next;
+      bumpCacheVersion();
+    },
+    [bumpCacheVersion, cache, categoryId, result, savedHistoryId, statusFilter, step],
+  );
 
   const loadCategories = useCallback(async () => {
     setCategoriesLoading(true);
@@ -248,6 +272,13 @@ export function RecommendPage({
       setResult(response);
       setSavedHistoryId(null);
       setStep("result");
+      persistCache({
+        result: response,
+        savedHistoryId: null,
+        step: "result",
+        categoryId,
+        statusFilter,
+      });
       if (response.eligible_candidate_count === 0) {
         setError("선택한 조건에 맞는 추천 항목이 없습니다.");
       }
@@ -264,7 +295,7 @@ export function RecommendPage({
         setRecommendPending(false);
       }
     }
-  }, [categoryId, recommendPending, showToast, statusFilter]);
+  }, [categoryId, persistCache, recommendPending, showToast, statusFilter]);
 
   const saveSelection = useCallback(async () => {
     if (!result?.candidate_type || !result.candidate_id || savedHistoryId || savePending) {
@@ -283,6 +314,11 @@ export function RecommendPage({
       setSavedHistoryId(saved.id);
       setConfirmOpen(false);
       setStep("complete");
+      persistCache({
+        savedHistoryId: saved.id,
+        step: "complete",
+        result,
+      });
       showToast("추천 이력이 저장되었습니다.");
     } catch (err) {
       if (requestId !== saveRequestId.current) return;
@@ -296,7 +332,7 @@ export function RecommendPage({
         setSavePending(false);
       }
     }
-  }, [result, savePending, savedHistoryId, showToast]);
+  }, [persistCache, result, savePending, savedHistoryId, showToast]);
 
   const resetToSetup = () => {
     setStep("setup");
@@ -304,6 +340,13 @@ export function RecommendPage({
     setSavedHistoryId(null);
     setError(null);
     setConfirmOpen(false);
+    persistCache({
+      step: "setup",
+      result: null,
+      savedHistoryId: null,
+      categoryId,
+      statusFilter,
+    });
   };
 
   const displayTitle =

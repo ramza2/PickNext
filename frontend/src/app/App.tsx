@@ -9,6 +9,17 @@ import {
 import type { Page } from "./pageTypes";
 import AppLayout from "./layout/AppLayout";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
+import {
+  useAppNavigation,
+  isAuthRoute,
+  isProtectedRoute,
+  routeToNavPage,
+  routeTitle,
+  sanitizeNextPath,
+  buildPath,
+  parseLocation,
+  type AppRoute,
+} from "../navigation";
 import { useHomeReadData } from "./hooks/useHomeReadData";
 import {
   useItemsReadData,
@@ -3338,6 +3349,61 @@ function SettingsPage({
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
+function layoutPageToRoute(page: Page): AppRoute {
+  switch (page) {
+    case "home":
+      return { name: "home" };
+    case "recommend":
+      return { name: "recommend" };
+    case "search":
+      return { name: "search" };
+    case "items":
+      return { name: "items" };
+    case "collections":
+      return { name: "collections" };
+    case "history":
+      return { name: "recommendation-history" };
+    case "settings":
+      return { name: "settings" };
+    case "category-manage":
+      return { name: "categories" };
+    case "item-detail":
+    case "history-detail":
+    case "data":
+    default:
+      return { name: "home" };
+  }
+}
+
+function authViewToRoute(view: AuthView, next?: string): AppRoute {
+  if (view === "signup") return { name: "signup" };
+  if (view === "find-id") return { name: "find-id" };
+  if (view === "password-reset") return { name: "password-reset" };
+  return { name: "login", next };
+}
+
+function routeToAuthView(route: AppRoute): AuthView {
+  if (route.name === "signup") return "signup";
+  if (route.name === "find-id") return "find-id";
+  if (route.name === "password-reset") return "password-reset";
+  return "login";
+}
+
+function NotFoundPage({ onHome }: { onHome: () => void }) {
+  return (
+    <div className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
+      <h1 className="text-xl font-bold text-foreground">페이지를 찾을 수 없습니다</h1>
+      <p className="text-sm text-muted-foreground">요청한 주소가 없거나 잘못된 경로입니다.</p>
+      <button
+        type="button"
+        onClick={onHome}
+        className="inline-flex items-center justify-center bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-medium"
+      >
+        홈으로
+      </button>
+    </div>
+  );
+}
 
 interface ItemDetailSelection {
   itemId: string;
@@ -3347,14 +3413,24 @@ interface ItemDetailSelection {
 }
 
 export default function App() {
+  const {
+    route,
+    navigate,
+    replace,
+    goBack,
+    cache,
+    clearSessionCaches,
+  } = useAppNavigation();
+
   const [authStatus, setAuthStatus] = useState<"loading" | "authenticated" | "unauthenticated">(
     "loading",
   );
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [authView, setAuthView] = useState<AuthView>("login");
-  const [page, setPage]               = useState<Page>("home");
-  const [itemDetailSelection, setItemDetailSelection] =
-    useState<ItemDetailSelection | null>(null);
+  const [itemDetailOrigin, setItemDetailOrigin] = useState<ItemDetailOrigin>("items");
+  const [itemDetailExtras, setItemDetailExtras] = useState<{
+    collectionId?: string;
+    collectionItemsPage?: number;
+  }>({});
   const [itemsSnapshot, setItemsSnapshot] =
     useState<ItemsPageStateSnapshot | null>(null);
   const [collectionsSnapshot, setCollectionsSnapshot] =
@@ -3363,38 +3439,78 @@ export default function App() {
     useState<SearchPageSnapshot | null>(null);
   const [collectionDetailSelection, setCollectionDetailSelection] =
     useState<CollectionDetailSelection | null>(null);
-  const [historyDetailId, setHistoryDetailId] = useState<string | null>(null);
-  const [recommendCategoryId, setRecommendCategoryId] = useState<string | null>(null);
-  const [recommendNonce, setRecommendNonce] = useState(0);
-  const [historyNonce, setHistoryNonce] = useState(0);
-  const [toast, setToast]                     = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [itemFormSession, setItemFormSession] = useState<ItemFormSession | null>(null);
   const [itemWriteBusy, setItemWriteBusy] = useState(false);
   const [itemDetailNonce, setItemDetailNonce] = useState(0);
+  const [lastHistoryDetailId, setLastHistoryDetailId] = useState<string | null>(null);
+  const redirecting401 = useRef(false);
+
+  const historyDetailId =
+    route.name === "recommendation-history-detail" ? route.historyId : null;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2800);
   }, []);
 
-  const clearProtectedState = useCallback(() => {
-    setPage("home");
-    setItemDetailSelection(null);
+  // Keep list snapshots mirrored into route cache for logout clear + future restore.
+  useEffect(() => {
+    cache.itemsSnapshot = itemsSnapshot;
+  }, [cache, itemsSnapshot]);
+  useEffect(() => {
+    cache.collectionsSnapshot = collectionsSnapshot;
+  }, [cache, collectionsSnapshot]);
+  useEffect(() => {
+    cache.searchSnapshot = searchSnapshot;
+  }, [cache, searchSnapshot]);
+
+  // Remember history detail id while visiting an item from that detail.
+  useEffect(() => {
+    if (route.name === "recommendation-history-detail") {
+      setLastHistoryDetailId(route.historyId);
+    }
+  }, [route]);
+
+  // Sync collection detail selection from URL.
+  useEffect(() => {
+    if (route.name === "collections") {
+      if (route.collectionId) {
+        setCollectionDetailSelection((prev) =>
+          prev?.collectionId === route.collectionId
+            ? prev
+            : { collectionId: route.collectionId!, itemsPage: 1 },
+        );
+      } else {
+        setCollectionDetailSelection(null);
+      }
+    }
+  }, [route]);
+
+  const resetLocalData = useCallback(() => {
+    setItemDetailOrigin("items");
+    setItemDetailExtras({});
     setItemsSnapshot(null);
     setCollectionsSnapshot(null);
     setSearchSnapshot(null);
     setCollectionDetailSelection(null);
-    setHistoryDetailId(null);
-    setRecommendCategoryId(null);
-    setRecommendNonce((n) => n + 1);
-    setHistoryNonce((n) => n + 1);
+    setLastHistoryDetailId(null);
     setItemFormSession(null);
     setItemWriteBusy(false);
     setToast(null);
+    clearSessionCaches();
+  }, [clearSessionCaches]);
+
+  const clearProtectedState = useCallback((loginNext?: string) => {
+    if (redirecting401.current) {
+      return;
+    }
+    redirecting401.current = true;
+    resetLocalData();
     setAuthUser(null);
     setAuthStatus("unauthenticated");
-    setAuthView("login");
-  }, []);
+    replace({ name: "login", next: loginNext });
+  }, [replace, resetLocalData]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3402,17 +3518,16 @@ export default function App() {
       try {
         const me = await fetchAuthMe(controller.signal);
         if (controller.signal.aborted) return;
+        redirecting401.current = false;
         setAuthUser(me);
         setAuthStatus("authenticated");
       } catch (err) {
         if (controller.signal.aborted) return;
-        if (err instanceof ApiError && (err.status === 401 || err.status === 0)) {
-          setAuthUser(null);
-          setAuthStatus("unauthenticated");
-          return;
-        }
         setAuthUser(null);
         setAuthStatus("unauthenticated");
+        if (err instanceof ApiError && (err.status === 401 || err.status === 0)) {
+          return;
+        }
       }
     })();
     return () => controller.abort();
@@ -3420,35 +3535,55 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      clearProtectedState();
+      const nextPath = isProtectedRoute(route) ? buildPath(route) : undefined;
+      clearProtectedState(nextPath);
     });
     return () => setUnauthorizedHandler(null);
-  }, [clearProtectedState]);
+  }, [clearProtectedState, route]);
 
+  // Auth route guard after bootstrap.
   useEffect(() => {
-    if (HIDDEN_PAGES.has(page)) {
-      setPage("home");
+    if (authStatus === "loading") return;
+
+    if (authStatus === "unauthenticated") {
+      if (isProtectedRoute(route) || route.name === "not-found") {
+        const next = route.name === "not-found" ? undefined : buildPath(route);
+        replace({ name: "login", next });
+      }
+      return;
     }
-  }, [page]);
+
+    // authenticated
+    if (isAuthRoute(route)) {
+      const next =
+        route.name === "login" ? sanitizeNextPath(route.next ?? null) : undefined;
+      if (next) {
+        // parse next as internal path
+        const url = new URL(next, window.location.origin);
+        const target = parseLocation(url.pathname, url.search);
+        replace(target);
+      } else {
+        replace({ name: "home" });
+      }
+    }
+  }, [authStatus, route, replace]);
 
   const openItemDetail = useCallback((
     itemId: string,
     origin: ItemDetailOrigin,
     extras?: { collectionId?: string; collectionItemsPage?: number },
   ) => {
-    setItemDetailSelection({
-      itemId,
-      origin,
-      collectionId: extras?.collectionId,
-      collectionItemsPage: extras?.collectionItemsPage,
-    });
-    setPage("item-detail");
-  }, []);
+    setItemDetailOrigin(origin);
+    setItemDetailExtras(extras ?? {});
+    navigate({ name: "item-detail", itemId });
+  }, [navigate]);
 
   const closeItemForm = useCallback(() => {
     if (itemWriteBusy) return;
     setItemFormSession(null);
   }, [itemWriteBusy]);
+
+  const currentPageName = routeToNavPage(route) as Page;
 
   const openCreateItem = useCallback((
     options?: {
@@ -3461,8 +3596,8 @@ export default function App() {
   ) => {
     if (itemWriteBusy || itemFormSession) return;
     const origin = options?.origin
-      ?? (page === "home" || page === "items" || page === "collections"
-        ? page
+      ?? (currentPageName === "home" || currentPageName === "items" || currentPageName === "collections"
+        ? currentPageName
         : "items");
     setItemFormSession({
       mode: "create",
@@ -3472,19 +3607,18 @@ export default function App() {
       lockedCollection: options?.lockedCollection,
       collectionItemsPage: options?.collectionItemsPage,
     });
-  }, [itemFormSession, itemWriteBusy, page]);
+  }, [currentPageName, itemFormSession, itemWriteBusy]);
 
   const openEditItem = useCallback((item: ApiItemDetail) => {
     if (itemWriteBusy || itemFormSession) return;
-    const selection = itemDetailSelection;
     setItemFormSession({
       mode: "edit",
       item,
-      origin: selection?.origin ?? "items",
-      collectionId: selection?.collectionId,
-      collectionItemsPage: selection?.collectionItemsPage,
+      origin: itemDetailOrigin,
+      collectionId: itemDetailExtras.collectionId,
+      collectionItemsPage: itemDetailExtras.collectionItemsPage,
     });
-  }, [itemDetailSelection, itemFormSession, itemWriteBusy]);
+  }, [itemDetailExtras, itemDetailOrigin, itemFormSession, itemWriteBusy]);
 
   const handleItemCreated = useCallback(async (
     created: ApiItemDetail,
@@ -3511,54 +3645,43 @@ export default function App() {
     session: Extract<ItemFormSession, { mode: "edit" }>,
   ) => {
     setItemFormSession(null);
-    setItemDetailSelection((prev) => (
-      prev
-        ? {
-            ...prev,
-            itemId: updated.id,
-            origin: session.origin,
-            collectionId: session.collectionId,
-            collectionItemsPage: session.collectionItemsPage,
-          }
-        : {
-            itemId: updated.id,
-            origin: session.origin,
-            collectionId: session.collectionId,
-            collectionItemsPage: session.collectionItemsPage,
-          }
-    ));
-    setPage("item-detail");
+    setItemDetailOrigin(session.origin);
+    setItemDetailExtras({
+      collectionId: session.collectionId,
+      collectionItemsPage: session.collectionItemsPage,
+    });
+    replace({ name: "item-detail", itemId: updated.id });
     setItemDetailNonce((value) => value + 1);
     showToast("항목을 수정했습니다.");
-  }, [showToast]);
+  }, [replace, showToast]);
 
   const handleLockedCollectionMissing = useCallback(async () => {
     setItemFormSession(null);
     setCollectionDetailSelection(null);
-    setPage("collections");
+    replace({ name: "collections" });
     showToast(ITEM_COLLECTION_NOT_FOUND_TOAST);
-  }, [showToast]);
+  }, [replace, showToast]);
 
   const closeItemDetail = useCallback(() => {
-    const selection = itemDetailSelection;
-    if (selection?.origin === "collections" && selection.collectionId) {
-      setCollectionDetailSelection({
-        collectionId: selection.collectionId,
-        itemsPage: selection.collectionItemsPage ?? 1,
-      });
-      setPage("collections");
-      setItemDetailSelection(null);
-      return;
-    }
-    if (selection?.origin === "search") {
-      setPage("search");
-      setItemDetailSelection(null);
-      return;
-    }
-    const destination = selection?.origin ?? "items";
-    setPage(destination === "collections" ? "collections" : destination);
-    setItemDetailSelection(null);
-  }, [itemDetailSelection]);
+    goBack(
+      itemDetailOrigin === "collections" && itemDetailExtras.collectionId
+        ? { name: "collections", collectionId: itemDetailExtras.collectionId }
+        : itemDetailOrigin === "search"
+          ? { name: "search" }
+          : itemDetailOrigin === "recommend"
+            ? { name: "recommend" }
+            : itemDetailOrigin === "history"
+              ? lastHistoryDetailId
+                ? {
+                    name: "recommendation-history-detail",
+                    historyId: lastHistoryDetailId,
+                  }
+                : { name: "recommendation-history" }
+              : itemDetailOrigin === "home"
+                ? { name: "home" }
+                : { name: "items" },
+    );
+  }, [goBack, itemDetailExtras.collectionId, itemDetailOrigin, lastHistoryDetailId]);
 
   const handleItemDeleteSuccess = useCallback(async (context: {
     origin: ItemDetailOrigin;
@@ -3577,61 +3700,42 @@ export default function App() {
           collectionId: context.collectionId,
           itemsPage: context.collectionItemsPage ?? 1,
         });
-        setPage("collections");
-        setItemDetailSelection(null);
+        replace({ name: "collections", collectionId: context.collectionId });
         showToast("항목을 삭제했습니다.");
       } catch (err) {
-        setItemDetailSelection(null);
-        setPage("collections");
         if (err instanceof ApiError && err.status === 404) {
           setCollectionDetailSelection(null);
+          replace({ name: "collections" });
           showToast("항목과 빈 컬렉션을 삭제했습니다.");
         } else {
           setCollectionDetailSelection(null);
+          replace({ name: "collections" });
           showToast("항목은 삭제했지만 컬렉션 상태를 새로 불러오지 못했습니다.");
         }
       }
       return;
     }
 
-    if (context.origin === "home") {
-      setPage("home");
-      setItemDetailSelection(null);
-      showToast("항목을 삭제했습니다.");
-      return;
-    }
-
-    if (context.origin === "search") {
-      setPage("search");
-      setItemDetailSelection(null);
-      showToast("항목을 삭제했습니다.");
-      return;
-    }
-
-    if (context.origin === "recommend") {
-      setPage("recommend");
-      setItemDetailSelection(null);
-      showToast("항목을 삭제했습니다.");
-      return;
-    }
-
-    if (context.origin === "history") {
-      setPage(historyDetailId ? "history-detail" : "history");
-      setItemDetailSelection(null);
-      showToast("항목을 삭제했습니다.");
-      return;
-    }
-
-    setPage("items");
-    setItemDetailSelection(null);
+    const dest: AppRoute =
+      context.origin === "home"
+        ? { name: "home" }
+        : context.origin === "search"
+          ? { name: "search" }
+          : context.origin === "recommend"
+            ? { name: "recommend" }
+            : context.origin === "history"
+              ? lastHistoryDetailId
+                ? { name: "recommendation-history-detail", historyId: lastHistoryDetailId }
+                : { name: "recommendation-history" }
+              : { name: "items" };
+    replace(dest);
     showToast("항목을 삭제했습니다.");
-  }, [showToast, historyDetailId]);
+  }, [lastHistoryDetailId, replace, showToast]);
 
   const handleEditItemMissing = useCallback(async (
     session: Extract<ItemFormSession, { mode: "edit" }>,
   ) => {
     setItemFormSession(null);
-    setItemDetailSelection(null);
     if (session.origin === "collections" && session.collectionId) {
       try {
         await getCollection(session.collectionId);
@@ -3639,24 +3743,31 @@ export default function App() {
           collectionId: session.collectionId,
           itemsPage: session.collectionItemsPage ?? 1,
         });
-        setPage("collections");
+        replace({ name: "collections", collectionId: session.collectionId });
       } catch {
         setCollectionDetailSelection(null);
-        setPage("collections");
+        replace({ name: "collections" });
       }
     } else if (session.origin === "home") {
-      setPage("home");
+      replace({ name: "home" });
     } else if (session.origin === "search") {
-      setPage("search");
+      replace({ name: "search" });
     } else if (session.origin === "recommend") {
-      setPage("recommend");
+      replace({ name: "recommend" });
     } else if (session.origin === "history") {
-      setPage(historyDetailId ? "history-detail" : "history");
+      if (lastHistoryDetailId) {
+        replace({
+          name: "recommendation-history-detail",
+          historyId: lastHistoryDetailId,
+        });
+      } else {
+        replace({ name: "recommendation-history" });
+      }
     } else {
-      setPage("items");
+      replace({ name: "items" });
     }
     showToast(ITEM_NOT_FOUND_TOAST);
-  }, [showToast, historyDetailId]);
+  }, [lastHistoryDetailId, replace, showToast]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -3669,39 +3780,50 @@ export default function App() {
 
   const navigateFromLayout = useCallback((next: Page) => {
     if (HIDDEN_PAGES.has(next)) {
-      setPage("home");
+      navigate({ name: "home" });
       return;
     }
-    if (next !== "item-detail") {
-      setItemDetailSelection(null);
-    }
-    if (next !== "collections") {
-      setCollectionDetailSelection(null);
-    }
-    if (next !== "history-detail") {
-      setHistoryDetailId(null);
-    }
-    if (next === "recommend") {
-      setRecommendCategoryId(null);
-      setRecommendNonce((n) => n + 1);
-    }
-    if (next === "history") {
-      setHistoryNonce((n) => n + 1);
-    }
-    setPage(next);
-  }, []);
+    navigate(layoutPageToRoute(next));
+  }, [navigate]);
+
+  const setPageCompat = useCallback((next: Page) => {
+    navigate(layoutPageToRoute(next));
+  }, [navigate]);
 
   const openHistoryDetail = useCallback((historyId: string) => {
-    setHistoryDetailId(historyId);
-    setPage("history-detail");
-  }, []);
+    navigate({ name: "recommendation-history-detail", historyId });
+  }, [navigate]);
+
+  const onCollectionSelectionChange = useCallback((
+    selection: CollectionDetailSelection | null,
+  ) => {
+    setCollectionDetailSelection(selection);
+    if (selection) {
+      navigate({ name: "collections", collectionId: selection.collectionId });
+    } else if (route.name === "collections") {
+      navigate({ name: "collections" });
+    }
+  }, [navigate, route.name]);
+
+  const itemDetailSelection: ItemDetailSelection | null =
+    route.name === "item-detail"
+      ? {
+          itemId: route.itemId,
+          origin: itemDetailOrigin,
+          collectionId: itemDetailExtras.collectionId,
+          collectionItemsPage: itemDetailExtras.collectionItemsPage,
+        }
+      : null;
 
   const renderPage = () => {
-    switch (page) {
+    if (route.name === "not-found") {
+      return <NotFoundPage onHome={() => replace({ name: "home" })} />;
+    }
+    switch (route.name) {
       case "home":
         return (
           <HomePage
-            setPage={setPage}
+            setPage={setPageCompat}
             openAddItem={() => openCreateItem({ origin: "home" })}
             openItemDetail={(id) => openItemDetail(id, "home")}
             openHistoryDetail={openHistoryDetail}
@@ -3719,40 +3841,28 @@ export default function App() {
       case "recommend":
         return (
           <RecommendPage
-            key={recommendNonce}
             showToast={showToast}
             openItemDetail={(id) => openItemDetail(id, "recommend")}
-            onOpenHistory={() => {
-              setHistoryNonce((n) => n + 1);
-              setPage("history");
-            }}
-            initialCategoryId={recommendCategoryId}
+            onOpenHistory={() => navigate({ name: "recommendation-history" })}
           />
         );
-      case "history":
+      case "recommendation-history":
         return (
           <HistoryPage
-            key={historyNonce}
             showToast={showToast}
             openHistoryDetail={openHistoryDetail}
           />
         );
-      case "history-detail":
+      case "recommendation-history-detail":
         return historyDetailId ? (
           <HistoryDetailPage
             key={historyDetailId}
             historyId={historyDetailId}
-            onBack={() => {
-              setHistoryDetailId(null);
-              setHistoryNonce((n) => n + 1);
-              setPage("history");
-            }}
+            onBack={() => goBack({ name: "recommendation-history" })}
             openItemDetail={(id) => openItemDetail(id, "history")}
             showToast={showToast}
           />
         ) : null;
-      case "data":
-        return null;
       case "items":
         return (
           <ItemsPage
@@ -3775,19 +3885,19 @@ export default function App() {
             initialSnapshot={collectionsSnapshot}
             onSnapshotChange={setCollectionsSnapshot}
             selection={collectionDetailSelection}
-            onSelectionChange={setCollectionDetailSelection}
+            onSelectionChange={onCollectionSelectionChange}
             openItemDetail={(itemId, context) =>
               openItemDetail(itemId, "collections", context)
             }
             openAddItem={(opts) => openCreateItem(opts)}
-            onNavigateToSearch={() => setPage("search")}
+            onNavigateToSearch={() => navigate({ name: "search" })}
             itemWriteBusy={itemWriteBusy || Boolean(itemFormSession)}
           />
         );
       case "settings":
         return (
           <SettingsPage
-            setPage={setPage}
+            setPage={setPageCompat}
             authUser={authUser}
             onLogout={() => void handleLogout()}
           />
@@ -3812,7 +3922,10 @@ export default function App() {
             }
           />
         );
-      case "category-manage":return <CategoryManagePage onBack={() => setPage("settings")}/>;
+      case "categories":
+        return <CategoryManagePage onBack={() => navigate({ name: "settings" })} />;
+      default:
+        return null;
     }
   };
 
@@ -3821,31 +3934,62 @@ export default function App() {
   }
 
   if (authStatus === "unauthenticated") {
+    const authView = routeToAuthView(route);
+    const goAuth = (view: AuthView) => {
+      const nextRoute = authViewToRoute(view, route.name === "login" ? route.next : undefined);
+      if (view === "login") {
+        replace(nextRoute);
+      } else {
+        navigate(nextRoute);
+      }
+    };
     if (authView === "signup") {
-      return <SignupView onNavigate={setAuthView} />;
+      return <SignupView onNavigate={goAuth} />;
     }
     if (authView === "find-id") {
-      return <FindIdView onNavigate={setAuthView} />;
+      return <FindIdView onNavigate={goAuth} />;
     }
     if (authView === "password-reset") {
-      return <PasswordResetView onNavigate={setAuthView} />;
+      return <PasswordResetView onNavigate={goAuth} />;
     }
     return (
       <LoginView
-        onNavigate={setAuthView}
+        onNavigate={goAuth}
         onLoggedIn={(user) => {
+          redirecting401.current = false;
           setAuthUser(user);
           setAuthStatus("authenticated");
-          setPage("home");
+          const next =
+            route.name === "login"
+              ? sanitizeNextPath(route.next ?? null)
+              : undefined;
+          if (next) {
+            const url = new URL(next, window.location.origin);
+            replace(parseLocation(url.pathname, url.search));
+          } else {
+            replace({ name: "home" });
+          }
         }}
       />
     );
   }
 
+  // Avoid flashing protected UI while redirecting away from auth routes.
+  if (isAuthRoute(route)) {
+    return <AuthLoadingSplash />;
+  }
+
+  const navPage = routeToNavPage(route);
+  const activeNavId =
+    navPage === "category-manage"
+      ? null
+      : (navPage as Page);
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <AppLayout
-        currentPage={page}
+        activeNavId={activeNavId}
+        title={routeTitle(route)}
         onNavigate={navigateFromLayout}
         onAddItem={() => openCreateItem()}
         loginId={authUser?.login_id ?? null}
@@ -3873,9 +4017,9 @@ export default function App() {
         />
       )}
 
-      {/* Global toast */}
       {toast && <Toast msg={toast}/>}
       <PwaUpdatePrompt />
     </div>
   );
 }
+

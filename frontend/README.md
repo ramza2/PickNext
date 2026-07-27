@@ -4,6 +4,8 @@ PickNext UI 프로토타입입니다. Figma Make에서 생성한 화면·Tailwin
 
 임의로 색상·Sidebar·Bottom Nav·카드·Typography를 재설계하지 않습니다.
 
+**NAV-1:** 화면 이동은 `src/navigation/` History Layer와 URL이 동기화됩니다 (`docs/13-browser-history-navigation.md`). React Router는 패키지에만 있고 런타임에서는 사용하지 않습니다. Nginx SPA Fallback과 PWA `navigateFallback`이 직접 URL·새로고침을 지원합니다.
+
 ## 실행
 
 요구: Node.js 20+ (권장 LTS)

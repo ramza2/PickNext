@@ -423,10 +423,9 @@ pytest -q
 
 ## 다음 개발 단계
 
-1. REC-1 로컬 Browser QA · 필요 시 운영 배포
-2. 브라우저·PWA 백버튼 (NAV-1)
-3. Legacy TMDB 자동 매칭·Backfill (선택)
-4. Traefik ACME·공인 DNS 확정 (DPL-4)
+1. NAV-1 Browser/PWA QA · 필요 시 운영 배포
+2. Legacy TMDB 자동 매칭·Backfill (선택)
+3. Traefik ACME·공인 DNS 확정 (DPL-4)
 
 설계 문서는 `docs/`를 참고하세요.
 
@@ -441,3 +440,4 @@ pytest -q
 | `docs/07-read-api-contract.md` | Category·Item 조회 API 계약·구현 |
 | `docs/11-authentication-plan.md` | 자체 계정 인증 (AUTH-1) |
 | `docs/12-random-recommendation-history.md` | 랜덤 추천·이력 (REC-1) |
+| `docs/13-browser-history-navigation.md` | 브라우저·PWA History Navigation (NAV-1) |

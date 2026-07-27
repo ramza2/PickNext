@@ -43,7 +43,7 @@ Figma: `FIGMA_MATCH` · `FIGMA_PARTIAL` · `FIGMA_ONLY` · `IMPLEMENTATION_ONLY`
 
 ## 4. Route 인벤토리
 
-**React Router는 패키지에 있으나 미사용.** `useState<Page>` + `AppLayout.onNavigate`로 전환 (`frontend/src/app/pageTypes.ts`, `App.tsx`).
+**React Router는 패키지에 있으나 미사용.** NAV-1부터 `NavigationProvider` + Canonical URL (`docs/13-browser-history-navigation.md`). Legacy `Page` id는 메뉴 활성 매핑용으로 유지.
 
 | Route (Page id) | Page Component | 접근 경로 | 주요 기능 | Backend | 상태 |
 | --- | --- | --- | --- | --- | --- |
@@ -435,3 +435,11 @@ SearchPage
 - **보완:** 최근 선택 History 후보 제외(`RECENT_HISTORY_EXCLUDE_COUNT`) **완전 제거**. History는 기록·조회·Home 표시만. 매 요청 독립 랜덤.
 - 격리 DB pytest 통과. Frontend `tsc`·`build` 통과. 실DB Migration·History Row 미적용.
 - 문서: `docs/03-recommendation-rules.md`, `docs/12-random-recommendation-history.md`.
+
+## Post-Audit Progress (NAV-1, 2026-07-27)
+
+- Browser/PWA Back·Forward·직접 URL·새로고침을 History Layer로 지원.
+- `frontend/src/navigation/` · Nginx SPA `try_files` · PWA `navigateFallback` + `/api` NetworkOnly 유지.
+- Auth `next`·Open Redirect 차단·로그아웃/401 Cache clear·Route Cache(메모리).
+- Backend/API/DB/Migration 변경 없음. Alembic Head `0007` 유지.
+- 문서: `docs/13-browser-history-navigation.md`.

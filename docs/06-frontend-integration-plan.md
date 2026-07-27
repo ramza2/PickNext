@@ -1,8 +1,9 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1/RC-2 PASS** · **SET-CLEAN-1** · **TMDB-2/TMDB-3** · **AUTH-1 (2026-07-27): Session Cookie 인증·Auth UI**
+> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1/RC-2 PASS** · **SET-CLEAN-1** · **TMDB-2/TMDB-3** · **AUTH-1** · **REC-1** · **NAV-1 (2026-07-27): History·URL 동기화**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)
-> **비범위 (잔여):** Bulk Delete, Drag & Drop, History/추천 UI, Category 쓰기, Export/Import, React Router, 자동화 Browser E2E
+> **비범위 (잔여):** Bulk Delete, Drag & Drop, Category 쓰기, Export/Import, React Router 전면 전환, 자동화 Browser E2E
+> **NAV-1 요약:** `window.history` Navigation Layer (`frontend/src/navigation/`). Canonical URL·Back/Forward·PWA Back·Auth `next`·Route Cache. 상세: `docs/13-browser-history-navigation.md`.
 >
 > **SET-CLEAN-1 요약:** Recommend/History/Data Nav 숨김 · Settings는 Category 보기만 · Category는 GET 읽기 전용 · `mocks/data.tsx`는 런타임 미사용.
 > **TMDB-2 요약:** `SearchPage`가 `GET /tmdb/status|search|details` + `POST /items/from-tmdb` 연동. Detail Panel·Register Form·등록됨 UX·`searchSnapshot`/`origin:"search"` 복귀. Collection「TMDB 검색 후 추가」→ Search 이동.
@@ -66,7 +67,7 @@ frontend/
    └─ styles/
 ```
 
-라우팅은 **react-router 미사용**. `useState<Page>`로 화면 전환.
+라우팅은 **react-router 미사용**(패키지 의존성만 존재). NAV-1부터 `NavigationProvider` + `AppRoute` URL 동기화 (`docs/13-browser-history-navigation.md`).
 
 디자인 토큰: `src/styles/theme.css` (`--primary: #2563EB`, `--background: #F5F5F3` 등).
 
@@ -82,8 +83,8 @@ frontend/
 | `items` | 전체 항목 (카드/테이블·필터·페이지) | `ItemsPage` | `/items` |
 | `item-detail` | 항목 상세 | `ItemDetailPage` | `/items/:id` |
 | `collections` | Collection 목록 + **인라인 상세** | `CollectionsPage` | `/collections`, `/collections/:id` |
-| `history` | 추천 이력 목록 | `HistoryPage` | `/history` |
-| `history-detail` | 추천 이력 상세 | `HistoryDetailPage` | `/history/:id` |
+| `history` | 추천 이력 목록 | `HistoryPage` | `/recommendation-history` |
+| `history-detail` | 추천 이력 상세 | `HistoryDetailPage` | `/recommendation-history/:id` |
 | `data` | 데이터 내보내기·가져오기 | `DataPage` | `/data` |
 | `settings` | 설정 | `SettingsPage` | `/settings` |
 | `category-manage` | Category 관리 | `CategoryManagePage` | `/settings/categories` |

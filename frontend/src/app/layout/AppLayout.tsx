@@ -24,23 +24,11 @@ const MORE_NAV = NAV.filter((item) =>
   item.id === "history" ||
   item.id === "settings",
 );
-const TOP_PAGES = new Set<Page>(["item-detail", "category-manage", "history-detail"]);
-
-const TITLES: Partial<Record<Page, string>> = {
-  home: "홈",
-  recommend: "랜덤 추천",
-  search: "영화·드라마 검색",
-  items: "전체 항목",
-  collections: "Collection",
-  history: "추천 이력",
-  "history-detail": "추천 이력 상세",
-  settings: "설정",
-  "item-detail": "항목 상세",
-  "category-manage": "Category",
-};
 
 interface AppLayoutProps {
-  currentPage: Page;
+  /** Sidebar / bottom-nav highlight (detail routes map to parent). */
+  activeNavId: Page | null;
+  title: string;
   onNavigate: (page: Page) => void;
   onAddItem: () => void;
   children: ReactNode;
@@ -49,7 +37,8 @@ interface AppLayoutProps {
 }
 
 export default function AppLayout({
-  currentPage,
+  activeNavId,
+  title,
   onNavigate,
   onAddItem,
   children,
@@ -61,12 +50,9 @@ export default function AppLayout({
     onNavigate(p);
     setMoreOpen(false);
   };
-  const activeNavId = TOP_PAGES.has(currentPage) ? null : currentPage;
-  const title = TITLES[currentPage] ?? "PickNext";
 
   return (
     <>
-      {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-56 bg-sidebar border-r border-sidebar-border flex-shrink-0">
         <div className="px-4 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
@@ -116,7 +102,6 @@ export default function AppLayout({
         )}
       </aside>
 
-      {/* Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-4 sm:px-6 py-3 bg-card border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -153,11 +138,13 @@ export default function AppLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <main
+          data-picknext-scroll-root
+          className="flex-1 overflow-y-auto pb-20 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {children}
         </main>
 
-        {/* Mobile Bottom Nav: home / search / items + more */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border px-1 py-1.5 z-40">
           <div className="flex">
             {MOBILE_PRIMARY.map((item) => (
