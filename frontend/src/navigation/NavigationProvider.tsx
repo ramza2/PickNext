@@ -13,7 +13,9 @@ import {
   createEntryId,
   ensureInitialHistoryMeta,
   isPickNextHistoryState,
+  normalizeOverlayForRoute,
   readHistoryState,
+  type AppOverlay,
   type PickNextHistoryState,
 } from "./history";
 import {
@@ -37,10 +39,13 @@ interface NavigationContextValue {
   route: AppRoute;
   entryId: string;
   navIndex: number;
+  currentOverlay: AppOverlay | null;
   cache: RouteSessionCache;
   navigate: (route: AppRoute, options?: NavigateOptions) => void;
   replace: (route: AppRoute) => void;
   goBack: (fallback?: AppRoute) => void;
+  openOverlay: (overlay: AppOverlay) => void;
+  closeOverlay: () => void;
   clearSessionCaches: () => void;
   bumpCacheVersion: () => void;
   cacheVersion: number;
@@ -87,9 +92,15 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<AppRoute>(initialRoute);
   const [entryId, setEntryId] = useState(initialMeta.entryId);
   const [navIndex, setNavIndex] = useState(initialMeta.navIndex);
+  const [currentOverlay, setCurrentOverlay] = useState<AppOverlay | null>(
+    normalizeOverlayForRoute(initialRoute, initialMeta.overlay),
+  );
   const navIndexRef = useRef(initialMeta.navIndex);
   const entryIdRef = useRef(initialMeta.entryId);
   const routeRef = useRef(initialRoute);
+  const overlayRef = useRef<AppOverlay | null>(
+    normalizeOverlayForRoute(initialRoute, initialMeta.overlay),
+  );
 
   useEffect(() => {
     routeRef.current = route;
@@ -105,11 +116,14 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 
   const applyRoute = useCallback(
     (next: AppRoute, meta: PickNextHistoryState, restore = false) => {
+      const normalizedOverlay = normalizeOverlayForRoute(next, meta.overlay);
       setRoute(next);
       setEntryId(meta.entryId);
       setNavIndex(meta.navIndex);
+      setCurrentOverlay(normalizedOverlay);
       navIndexRef.current = meta.navIndex;
       entryIdRef.current = meta.entryId;
+      overlayRef.current = normalizedOverlay;
       if (restore) {
         restoreScroll(cacheRef.current, meta.entryId);
       }
@@ -126,9 +140,14 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       if (routesEqual(routeRef.current, next) && method === "replace") {
         const current = readHistoryState();
         if (current) {
-          applyHistory("replace", next, current);
+          applyHistory("replace", next, {
+            ...current,
+            overlay: undefined,
+          });
         }
         setRoute(next);
+        setCurrentOverlay(null);
+        overlayRef.current = null;
         return;
       }
 
@@ -140,6 +159,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
           entryId: entryIdRef.current,
           navIndex: navIndexRef.current,
           routeName: next.name,
+          overlay: undefined,
         };
         applyHistory("replace", next, meta);
         applyRoute(next, meta, false);
@@ -151,6 +171,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
         entryId: createEntryId(),
         navIndex: navIndexRef.current + 1,
         routeName: next.name,
+        overlay: undefined,
       };
       applyHistory("push", next, meta);
       applyRoute(next, meta, false);
@@ -178,6 +199,50 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
     [replace],
   );
 
+  const openOverlay = useCallback((overlay: AppOverlay) => {
+    const normalized = normalizeOverlayForRoute(routeRef.current, overlay);
+    if (!normalized) return;
+    const active = overlayRef.current;
+    if (
+      active?.type === normalized.type
+      && active.itemId === normalized.itemId
+    ) {
+      return;
+    }
+
+    rememberScroll(cacheRef.current, entryIdRef.current);
+    const meta: PickNextHistoryState = {
+      picknext: true,
+      entryId: createEntryId(),
+      navIndex: navIndexRef.current + 1,
+      routeName: routeRef.current.name,
+      overlay: normalized,
+    };
+    applyHistory("push", routeRef.current, meta);
+    applyRoute(routeRef.current, meta, false);
+  }, [applyRoute]);
+
+  const closeOverlay = useCallback(() => {
+    const active = overlayRef.current;
+    if (!active) return;
+
+    rememberScroll(cacheRef.current, entryIdRef.current);
+    if (navIndexRef.current > 0) {
+      window.history.back();
+      return;
+    }
+
+    const meta: PickNextHistoryState = {
+      picknext: true,
+      entryId: entryIdRef.current,
+      navIndex: navIndexRef.current,
+      routeName: routeRef.current.name,
+      overlay: undefined,
+    };
+    applyHistory("replace", routeRef.current, meta);
+    applyRoute(routeRef.current, meta, false);
+  }, [applyRoute]);
+
   const clearSessionCaches = useCallback(() => {
     clearRouteCache(cacheRef.current);
     bumpCacheVersion();
@@ -193,11 +258,23 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
             entryId: createEntryId(),
             navIndex: 0,
             routeName: nextRoute.name,
+            overlay: undefined,
           };
-      if (!isPickNextHistoryState(event.state)) {
-        applyHistory("replace", nextRoute, state);
+      const normalizedOverlay = normalizeOverlayForRoute(nextRoute, state.overlay);
+      if (!isPickNextHistoryState(event.state) || normalizedOverlay !== (state.overlay ?? null)) {
+        applyHistory("replace", nextRoute, {
+          ...state,
+          overlay: normalizedOverlay ?? undefined,
+        });
       }
-      applyRoute(nextRoute, state, true);
+      applyRoute(
+        nextRoute,
+        {
+          ...state,
+          overlay: normalizedOverlay ?? undefined,
+        },
+        true,
+      );
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -208,10 +285,13 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       route,
       entryId,
       navIndex,
+      currentOverlay,
       cache: cacheRef.current,
       navigate,
       replace,
       goBack,
+      openOverlay,
+      closeOverlay,
       clearSessionCaches,
       bumpCacheVersion,
       cacheVersion,
@@ -220,9 +300,12 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       route,
       entryId,
       navIndex,
+      currentOverlay,
       navigate,
       replace,
       goBack,
+      openOverlay,
+      closeOverlay,
       clearSessionCaches,
       bumpCacheVersion,
       cacheVersion,

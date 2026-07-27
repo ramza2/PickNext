@@ -443,3 +443,11 @@ SearchPage
 - Auth `next`·Open Redirect 차단·로그아웃/401 Cache clear·Route Cache(메모리).
 - Backend/API/DB/Migration 변경 없음. Alembic Head `0007` 유지.
 - 문서: `docs/13-browser-history-navigation.md`.
+
+## Post-Audit Progress (NAV-1A, 2026-07-27)
+
+- Item 상세 `항목 수정` Modal을 Browser History Overlay(`overlay: item-edit`)로 연동.
+- 수정 팝업 open 시 동일 URL overlay entry push, Back/PWA Back 시 팝업만 닫힘.
+- X/취소/ESC/Backdrop/저장 성공이 `closeOverlay()` 경로를 공통 사용.
+- same-route no-op 정책 유지, overlay 중복 push 방지, 새로고침 시 overlay 미복원.
+- Backend/API/DB/Migration 변경 없음. 격리 DB pytest 306 passed.

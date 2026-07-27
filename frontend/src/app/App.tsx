@@ -3418,6 +3418,9 @@ export default function App() {
     navigate,
     replace,
     goBack,
+    currentOverlay,
+    openOverlay,
+    closeOverlay,
     cache,
     clearSessionCaches,
   } = useAppNavigation();
@@ -3448,6 +3451,10 @@ export default function App() {
 
   const historyDetailId =
     route.name === "recommendation-history-detail" ? route.historyId : null;
+  const isItemEditOverlayOpen =
+    route.name === "item-detail"
+    && currentOverlay?.type === "item-edit"
+    && currentOverlay.itemId === route.itemId;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -3471,6 +3478,66 @@ export default function App() {
       setLastHistoryDetailId(route.historyId);
     }
   }, [route]);
+
+  const clearEditItemFormSession = useCallback(() => {
+    setItemFormSession((current) => {
+      if (!current || current.mode !== "edit") return current;
+      return null;
+    });
+  }, []);
+
+  // Keep Edit Session in sync with History Overlay (Source of Truth).
+  useEffect(() => {
+    if (!isItemEditOverlayOpen) {
+      clearEditItemFormSession();
+      return;
+    }
+
+    if (route.name !== "item-detail") {
+      clearEditItemFormSession();
+      return;
+    }
+
+    if (itemFormSession?.mode === "edit") {
+      if (itemFormSession.item.id === route.itemId) return;
+      clearEditItemFormSession();
+    }
+
+    if (itemFormSession?.mode === "create") return;
+
+    const itemId = route.itemId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const item = await getItem(itemId);
+        if (cancelled) return;
+        setItemFormSession({
+          mode: "edit",
+          item,
+          origin: itemDetailOrigin,
+          collectionId: itemDetailExtras.collectionId,
+          collectionItemsPage: itemDetailExtras.collectionItemsPage,
+        });
+      } catch {
+        if (cancelled) return;
+        clearEditItemFormSession();
+        closeOverlay();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    clearEditItemFormSession,
+    closeOverlay,
+    isItemEditOverlayOpen,
+    itemDetailExtras.collectionId,
+    itemDetailExtras.collectionItemsPage,
+    itemDetailOrigin,
+    itemFormSession,
+    route,
+  ]);
 
   // Sync collection detail selection from URL.
   useEffect(() => {
@@ -3580,8 +3647,16 @@ export default function App() {
 
   const closeItemForm = useCallback(() => {
     if (itemWriteBusy) return;
+    if (itemFormSession?.mode === "edit") {
+      if (isItemEditOverlayOpen) {
+        closeOverlay();
+      } else {
+        setItemFormSession(null);
+      }
+      return;
+    }
     setItemFormSession(null);
-  }, [itemWriteBusy]);
+  }, [closeOverlay, isItemEditOverlayOpen, itemFormSession, itemWriteBusy]);
 
   const currentPageName = routeToNavPage(route) as Page;
 
@@ -3610,7 +3685,9 @@ export default function App() {
   }, [currentPageName, itemFormSession, itemWriteBusy]);
 
   const openEditItem = useCallback((item: ApiItemDetail) => {
-    if (itemWriteBusy || itemFormSession) return;
+    if (itemWriteBusy) return;
+    if (itemFormSession?.mode === "create") return;
+    if (isItemEditOverlayOpen) return;
     setItemFormSession({
       mode: "edit",
       item,
@@ -3618,7 +3695,15 @@ export default function App() {
       collectionId: itemDetailExtras.collectionId,
       collectionItemsPage: itemDetailExtras.collectionItemsPage,
     });
-  }, [itemDetailExtras, itemDetailOrigin, itemFormSession, itemWriteBusy]);
+    openOverlay({ type: "item-edit", itemId: item.id });
+  }, [
+    itemDetailExtras,
+    itemDetailOrigin,
+    itemFormSession,
+    isItemEditOverlayOpen,
+    itemWriteBusy,
+    openOverlay,
+  ]);
 
   const handleItemCreated = useCallback(async (
     created: ApiItemDetail,
@@ -3644,16 +3729,17 @@ export default function App() {
     updated: ApiItemDetail,
     session: Extract<ItemFormSession, { mode: "edit" }>,
   ) => {
-    setItemFormSession(null);
     setItemDetailOrigin(session.origin);
     setItemDetailExtras({
       collectionId: session.collectionId,
       collectionItemsPage: session.collectionItemsPage,
     });
     replace({ name: "item-detail", itemId: updated.id });
+    closeOverlay();
+    setItemFormSession(null);
     setItemDetailNonce((value) => value + 1);
     showToast("항목을 수정했습니다.");
-  }, [replace, showToast]);
+  }, [closeOverlay, replace, showToast]);
 
   const handleLockedCollectionMissing = useCallback(async () => {
     setItemFormSession(null);
@@ -3891,7 +3977,11 @@ export default function App() {
             }
             openAddItem={(opts) => openCreateItem(opts)}
             onNavigateToSearch={() => navigate({ name: "search" })}
-            itemWriteBusy={itemWriteBusy || Boolean(itemFormSession)}
+            itemWriteBusy={
+              itemWriteBusy
+              || itemFormSession?.mode === "create"
+              || isItemEditOverlayOpen
+            }
           />
         );
       case "settings":
@@ -3914,7 +4004,11 @@ export default function App() {
             collectionItemsPage={itemDetailSelection?.collectionItemsPage}
             onDeleteSuccess={handleItemDeleteSuccess}
             onEdit={openEditItem}
-            writeBusy={itemWriteBusy || Boolean(itemFormSession)}
+            writeBusy={
+              itemWriteBusy
+              || itemFormSession?.mode === "create"
+              || isItemEditOverlayOpen
+            }
             backLabel={
               itemDetailSelection?.origin === "collections"
                 ? "Collection으로"
@@ -3998,7 +4092,7 @@ export default function App() {
         {renderPage()}
       </AppLayout>
 
-      {itemFormSession && (
+      {itemFormSession && (itemFormSession.mode === "create" || isItemEditOverlayOpen) && (
         <ItemFormModal
           key={
             itemFormSession.mode === "edit"

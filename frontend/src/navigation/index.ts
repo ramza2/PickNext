@@ -1,4 +1,5 @@
 export type { AppRoute, ItemsListQuery } from "./routes";
+export type { AppOverlay } from "./history";
 export {
   buildPath,
   parseLocation,

@@ -1,6 +1,6 @@
-# 13. Browser History Navigation (NAV-1)
+# 13. Browser History Navigation (NAV-1, NAV-1A)
 
-> **상태:** NAV-1 구현 완료 (2026-07-27)  
+> **상태:** NAV-1 + NAV-1A 구현 완료 (2026-07-27)  
 > **방식:** React Router 전면 전환 없음. `window.history` + `popstate` 기반 소형 Navigation Layer.  
 > **근거:** `react-router`는 `package.json`에 있으나 `src`에서 미사용. 기존 `Page` state를 URL과 동기화하는 최소 계층이 적합.
 
@@ -49,10 +49,20 @@ interface PickNextHistoryState {
   entryId: string;
   navIndex: number;
   routeName: string;
+  overlay?: { type: "item-edit"; itemId: string };
 }
 ```
 
 저장하지 않음: Session Token, Password, API Response 전체.
+
+## 3A. Item Edit Overlay (NAV-1A)
+
+- 대상은 `item-detail`의 `항목 수정` 팝업 한 곳만.
+- URL은 그대로 `/items/:itemId`를 유지하고, History state의 `overlay`만 push.
+- `openOverlay({ type: "item-edit", itemId })`는 동일 URL이어도 별도 Entry를 1회 push.
+- `closeOverlay()`는 현재 overlay entry면 `history.back()`으로 닫고, 비정상 상태는 안전하게 local close.
+- Modal 표시 기준은 `currentOverlay?.type === "item-edit"` + `route.itemId` 일치.
+- 초기 bootstrap(`ensureInitialHistoryMeta`)에서는 overlay를 제거해 새로고침 시 Modal을 자동 복원하지 않음.
 
 ## 4. push / replace / no-op
 
@@ -102,7 +112,10 @@ interface PickNextHistoryState {
 9. 로그아웃 후 Protected URL → Login + next → 로그인 후 복귀  
 10. 로그아웃 후 Browser Back → 이전 사용자 데이터 Flash 없음  
 11. 설치형 PWA 시스템 Back = Browser Back  
-12. 앱 첫 Entry에서 Back → OS 기본 동작 (무한 Home Loop 없음)
+12. 앱 첫 Entry에서 Back → OS 기본 동작 (무한 Home Loop 없음)  
+13. Item 상세 → 수정 팝업 → Back/PWA Back → 팝업만 닫힘(상세/URL 유지)  
+14. X/취소/Escape/Backdrop 닫기 후 Back 1회 → 상세 이전 화면  
+15. Back으로 팝업 닫은 뒤 Forward → 팝업 재오픈 가능(자동 저장/자동 API 호출 없음)
 
 ## 10. 비범위 (유지)
 
