@@ -411,23 +411,22 @@ pytest -q
 - TMDB: `GET /tmdb/status|search|details/...`, `POST /items/from-tmdb`
 - **AUTH-1:** Session Cookie 인증 · 회원가입/복구 · Frontend Auth UI
 - Frontend Home·Items·Collections·Item Detail·TMDB Search 실연동
+- **REC-1:** 랜덤 추천 · 이걸로 선택 · 추천 이력 목록/상세/삭제 · Home 최근 선택
 
 ## 이번 범위에서 제외
 
 - Google/Firebase/OAuth/JWT
 - Category 쓰기 CRUD UI
-- 랜덤 추천·선택·이력 API/UI
+- 순차·혼합 추천 (REC-1은 랜덤만)
 - Legacy TMDB 자동 매칭·Backfill
 - Traefik ACME·공인 DNS 확정 (DPL-4)
-- AUTH-1 실DB/운영 Migration·실제 SMTP (별도 승인)
 
 ## 다음 개발 단계
 
-1. AUTH-1 로컬·운영 적용 (Backup · Migration · Credential CLI · SMTP QA)
-2. 랜덤 추천 및 `이걸로 선택` 이력 API (REC-1)
-3. 브라우저·PWA 백버튼 (NAV-1)
-4. Legacy TMDB 자동 매칭·Backfill (선택)
-5. Traefik ACME·공인 DNS 확정 (DPL-4)
+1. REC-1 로컬 Browser QA · 필요 시 운영 배포
+2. 브라우저·PWA 백버튼 (NAV-1)
+3. Legacy TMDB 자동 매칭·Backfill (선택)
+4. Traefik ACME·공인 DNS 확정 (DPL-4)
 
 설계 문서는 `docs/`를 참고하세요.
 
@@ -435,9 +434,10 @@ pytest -q
 | --- | --- |
 | `docs/01-product-scope.md` | 서비스 범위 |
 | `docs/02-domain-model.md` | 도메인 모델 |
-| `docs/03-recommendation-rules.md` | 추천 규칙 |
+| `docs/03-recommendation-rules.md` | 추천 규칙 (랜덤 전용) |
 | `docs/04-legacy-migration.md` | Legacy Import·보정 |
 | `docs/05-tmdb-integration-plan.md` | TMDB 검색·등록 기획 |
 | `docs/06-frontend-integration-plan.md` | Figma Frontend 분석·API 연동 계획 |
 | `docs/07-read-api-contract.md` | Category·Item 조회 API 계약·구현 |
 | `docs/11-authentication-plan.md` | 자체 계정 인증 (AUTH-1) |
+| `docs/12-random-recommendation-history.md` | 랜덤 추천·이력 (REC-1) |

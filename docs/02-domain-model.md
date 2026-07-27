@@ -69,10 +69,14 @@ Legacy Import 7,202건 및 직접 입력 Item은 외부 연동 정보 없이 `NU
 
 ### recommendation_history
 
-사용자가 `이걸로 선택`한 결과만 저장한다.
+사용자가 `이걸로 선택`한 결과만 저장한다. 랜덤 추천 실행만으로는 행이 생기지 않는다.
 
 - `status_filter`: `PLANNED` / `COMPLETED` / `ALL`
-- 단일 항목 선택 시 `collection_id`는 NULL
+- 단일 Item 선택 시 `collection_id`는 NULL
+- Collection 선택 시 `collection_id` 설정 + 소속 Item Snapshot 전체
+- 추천 방식 컬럼(`recommendation_type` 등) 없음 — 랜덤 전용
+
+상세 API: [12-random-recommendation-history.md](./12-random-recommendation-history.md)
 
 ### recommendation_history_items
 

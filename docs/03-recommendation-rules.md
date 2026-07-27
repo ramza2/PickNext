@@ -2,42 +2,69 @@
 
 ## 알고리즘
 
-추천 알고리즘은 **단순 랜덤 한 종류**만 사용한다. 가중치, 협업 필터링, 인기도 기반 로직은 초기 범위에 포함하지 않는다.
+추천 알고리즘은 **단순 랜덤 한 종류**만 사용한다.
+
+구현하지 않는 것:
+
+- 순차 추천 / 혼합 추천
+- 가중치·협업 필터링·인기도·평점 가중·AI·TMDB 추천 API
+- 추천 방식 선택 UI / `SEQUENCE` / `MIX` / `resolved_mode`
 
 ## 입력 조건
 
-사용자는 다음을 선택한다.
-
-1. 카테고리
+1. 카테고리 (현재 로그인 사용자 소유)
 2. 상태 필터
-   - `PLANNED`
-   - `COMPLETED`
-   - `ALL`
+   - `PLANNED` → `Item.status = PLANNED`
+   - `COMPLETED` → `Item.status = COMPLETED`
+   - `ALL` → 상태 조건 없음
 
 ## 후보 구성
 
-- DB에 **존재하는 Item 전체**를 후보에 포함한다. Soft Delete / `deleted_at` 조건은 없다.
-- **동일 컬렉션에 속한 항목은 하나의 추천 후보로 취급**한다.
-- 컬렉션에 속하지 않은 항목은 각각 독립 후보다.
+- 현재 사용자 Item만 사용한다.
+- **동일 Collection에 속한 항목은 하나의 추천 후보**로 취급한다.
+- Collection에 속하지 않은 항목은 각각 독립 후보다.
+- Collection 소속 Item을 개별 후보로 중복 포함하지 않는다.
+
+후보가 구성되면 **매 요청마다 전체 Eligible 후보에서 독립적으로** 하나를 무작위 선택한다.
 
 ## 결과 반환
 
-- 단일 항목 후보가 선택되면 해당 항목 1개를 반환한다.
-- **시리즈(컬렉션)가 선택되면 해당 시리즈의 전체 항목을 결과로 반환**한다.
+- 단일 Item 후보 → Item 1건
+- Collection 후보 → 해당 Collection의 **전체 Item** (혼재 Category·status 가능)
+- 후보 0건 → HTTP 200 + 빈 `items` (`eligible_candidate_count: 0`)
+
+## 추천 이력과 후보의 관계
+
+- 추천 이력은 **기록·조회** 용도만 사용한다 (목록·상세·Home 최근 선택·삭제).
+- 추천 이력·이전 추천 결과는 **후보 선정에 영향을 주지 않는다**.
+- 같은 Item 또는 Collection이 연속으로 추천될 수 있다.
+- `이걸로 선택`으로 저장한 뒤에도 해당 후보는 다음 추천에 그대로 포함된다.
+
+Home의 **최근 선택**은 화면 표시 기능이며, 후보 제외와 무관하다.
 
 ## 이력 저장 정책
 
 - 랜덤 추천 실행만으로는 `recommendation_history`에 저장하지 않는다.
-- 사용자가 **`이걸로 선택`**한 경우에만 이력을 저장한다.
-- 이력에는 선택 시점의 `title_snapshot`과 `status_at_selection`을 함께 남긴다.
+- 사용자가 **`이걸로 선택`**한 경우에만 Snapshot 이력을 저장한다.
+- Snapshot: `title_snapshot`, `status_at_selection`, `sort_order`
+- Frontend가 Item 목록을 보내 저장하지 않는다. Backend가 재조회한다.
 
 ## 이력 활용
 
-- 추천 이력에서 각 항목의 `item_id`로 상세 화면에 이동할 수 있어야 한다.
-- 상세 화면에서 완료 상태(`PLANNED` ↔ `COMPLETED`)를 수정할 수 있어야 한다.
-- Item Hard Delete(`DELETE /api/v1/items/{id}`, D-3~D-5 구현) 시 해당 Item을 포함한 `recommendation_history` **전체**와 연결 행·Snapshot을 함께 삭제한다.
-- Item PATCH(`PATCH /api/v1/items/{id}`, I-1) · Item Form 수정(I-2) · Collection 상세 빠른 연결 해제·상태 변경(I-3)은 `title_snapshot`·`status_at_selection` 등 추천 이력 Snapshot을 **수정하지 않는다**. Snapshot 갱신·History 삭제는 Item DELETE에서만 수행한다.
-- 같은 History에 있던 다른 Item **본체**는 유지한다.
-- 연결 행만 지우고 부모 History를 남기지 않는다.
+- 이력 `item_id`로 Item 상세 이동
+- Item Hard Delete 시 해당 Item을 포함한 History **부모 전체** 삭제
+- Item PATCH는 Snapshot을 수정하지 않는다
+- Collection 삭제 정책·`collection_id ON DELETE SET NULL`는 기존과 동일
 
-> 참고: 실제 추천/선택 API는 이후 작업에서 구현한다. Item 삭제 Transaction은 구현됨.
+## API (요약)
+
+상세: [12-random-recommendation-history.md](./12-random-recommendation-history.md)
+
+| Method | Path |
+| --- | --- |
+| `POST` | `/api/v1/recommendations/random` |
+| `POST` | `/api/v1/recommendation-history` |
+| `GET` | `/api/v1/recommendation-history` |
+| `GET` | `/api/v1/recommendation-history/{id}` |
+| `DELETE` | `/api/v1/recommendation-history/{id}` |
+| `DELETE` | `/api/v1/recommendation-history` |

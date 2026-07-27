@@ -109,12 +109,19 @@ import {
   type SearchPageSnapshot,
 } from "./search/SearchPage";
 import { unmarkDeletedItemInSearchSnapshot } from "./search/registration";
+import { RecommendPage } from "./recommend/RecommendPage";
+import { HistoryPage } from "./recommend/HistoryPage";
+import { HistoryDetailPage } from "./recommend/HistoryDetailPage";
+import {
+  getRecommendationHistory,
+} from "../api/recommendationHistory";
+import type { RecommendationHistoryListItem } from "../types/recommendation";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type ItemDetailOrigin = "items" | "home" | "collections" | "search";
+type ItemDetailOrigin = "items" | "home" | "collections" | "search" | "recommend" | "history";
 
-const HIDDEN_PAGES = new Set<Page>(["recommend", "history", "history-detail", "data"]);
+const HIDDEN_PAGES = new Set<Page>(["data"]);
 
 // ─── Shared Atoms ─────────────────────────────────────────────────────────────
 
@@ -1467,10 +1474,22 @@ function HomeSectionError({ message, onRetry }: { message: string; onRetry: () =
   );
 }
 
-function HomePage({ setPage, openAddItem, openItemDetail }: {
+function formatHistorySelectedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
+function HomePage({ setPage, openAddItem, openItemDetail, openHistoryDetail }: {
   setPage: (p: Page) => void;
   openAddItem: () => void;
   openItemDetail: (itemId: string) => void;
+  openHistoryDetail: (historyId: string) => void;
 }) {
   // Hook lives in HomePage: App uses conditional page render, so data loads on Home entry
   // and refetches when returning to Home (no cache library in B-2a).
@@ -1489,6 +1508,34 @@ function HomePage({ setPage, openAddItem, openItemDetail }: {
     reloadRecentItems,
   } = useHomeReadData();
 
+  const [recentHistory, setRecentHistory] = useState<RecommendationHistoryListItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyRequestId = useRef(0);
+
+  const reloadRecentHistory = useCallback(async () => {
+    const requestId = ++historyRequestId.current;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const response = await getRecommendationHistory({ page: 1, page_size: 5 });
+      if (requestId !== historyRequestId.current) return;
+      setRecentHistory(response.items);
+    } catch {
+      if (requestId !== historyRequestId.current) return;
+      setRecentHistory([]);
+      setHistoryError("최근 선택 이력을 불러오지 못했습니다.");
+    } finally {
+      if (requestId === historyRequestId.current) {
+        setHistoryLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadRecentHistory();
+  }, [reloadRecentHistory]);
+
   const homeCategories = categories.map(mapApiCategoryToHomeCategory);
   const recent = recentItems.map(mapApiItemToHomeRecentItem);
 
@@ -1506,6 +1553,10 @@ function HomePage({ setPage, openAddItem, openItemDetail }: {
         <p className="text-sm text-muted-foreground mb-1">내 콘텐츠를 한눈에 확인하세요.</p>
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-5">오늘은 무엇을 선택할까요?</h1>
         <div className="flex flex-wrap gap-3">
+          <button onClick={() => setPage("recommend")}
+            className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition-colors">
+            <Shuffle size={16}/> 빠른 추천
+          </button>
           <button onClick={() => setPage("search")}
             className="inline-flex items-center gap-2 border border-border bg-card text-foreground px-5 py-2.5 rounded-xl font-medium hover:bg-muted transition-colors">
             <Search size={16}/> 콘텐츠 검색
@@ -1540,6 +1591,7 @@ function HomePage({ setPage, openAddItem, openItemDetail }: {
         )}
       </div>
 
+      <div className="grid sm:grid-cols-2 gap-6">
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">최근 등록</h2>
@@ -1606,6 +1658,68 @@ function HomePage({ setPage, openAddItem, openItemDetail }: {
             })}
           </div>
         )}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">최근 선택</h2>
+          <button onClick={() => setPage("history")} className="text-xs text-primary hover:underline">전체 보기</button>
+        </div>
+        {historyError && !historyLoading ? (
+          <HomeSectionError message={historyError} onRetry={() => void reloadRecentHistory()}/>
+        ) : historyLoading ? (
+          <div className="space-y-2">
+            {[0,1,2].map(i => (
+              <div key={i} className="bg-card border border-border rounded-xl p-3 h-14 animate-pulse bg-muted/40"/>
+            ))}
+          </div>
+        ) : recentHistory.length === 0 ? (
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-sm text-muted-foreground">저장된 추천 이력이 없습니다.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recentHistory.map(entry => {
+              const presentation = getCategoryPresentation(entry.category.name);
+              return (
+                <div
+                  key={entry.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openHistoryDetail(entry.id)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openHistoryDetail(entry.id);
+                    }
+                  }}
+                  className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer"
+                >
+                  <ContentPoster
+                    src={entry.poster_url}
+                    title={entry.title}
+                    fallbackColor={presentation.color}
+                    size="xs"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {entry.candidate_type === "COLLECTION" ? (
+                        <Layers size={12} className="text-purple-600 flex-shrink-0"/>
+                      ) : (
+                        <Shuffle size={12} className="text-blue-600 flex-shrink-0"/>
+                      )}
+                      <div className="text-sm font-medium text-foreground truncate">{entry.title}</div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatHistorySelectedAt(entry.selected_at)} · {entry.item_count}개
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       </div>
 
       <div>
@@ -3249,6 +3363,10 @@ export default function App() {
     useState<SearchPageSnapshot | null>(null);
   const [collectionDetailSelection, setCollectionDetailSelection] =
     useState<CollectionDetailSelection | null>(null);
+  const [historyDetailId, setHistoryDetailId] = useState<string | null>(null);
+  const [recommendCategoryId, setRecommendCategoryId] = useState<string | null>(null);
+  const [recommendNonce, setRecommendNonce] = useState(0);
+  const [historyNonce, setHistoryNonce] = useState(0);
   const [toast, setToast]                     = useState<string | null>(null);
   const [itemFormSession, setItemFormSession] = useState<ItemFormSession | null>(null);
   const [itemWriteBusy, setItemWriteBusy] = useState(false);
@@ -3266,6 +3384,10 @@ export default function App() {
     setCollectionsSnapshot(null);
     setSearchSnapshot(null);
     setCollectionDetailSelection(null);
+    setHistoryDetailId(null);
+    setRecommendCategoryId(null);
+    setRecommendNonce((n) => n + 1);
+    setHistoryNonce((n) => n + 1);
     setItemFormSession(null);
     setItemWriteBusy(false);
     setToast(null);
@@ -3486,10 +3608,24 @@ export default function App() {
       return;
     }
 
+    if (context.origin === "recommend") {
+      setPage("recommend");
+      setItemDetailSelection(null);
+      showToast("항목을 삭제했습니다.");
+      return;
+    }
+
+    if (context.origin === "history") {
+      setPage(historyDetailId ? "history-detail" : "history");
+      setItemDetailSelection(null);
+      showToast("항목을 삭제했습니다.");
+      return;
+    }
+
     setPage("items");
     setItemDetailSelection(null);
     showToast("항목을 삭제했습니다.");
-  }, [showToast]);
+  }, [showToast, historyDetailId]);
 
   const handleEditItemMissing = useCallback(async (
     session: Extract<ItemFormSession, { mode: "edit" }>,
@@ -3512,11 +3648,15 @@ export default function App() {
       setPage("home");
     } else if (session.origin === "search") {
       setPage("search");
+    } else if (session.origin === "recommend") {
+      setPage("recommend");
+    } else if (session.origin === "history") {
+      setPage(historyDetailId ? "history-detail" : "history");
     } else {
       setPage("items");
     }
     showToast(ITEM_NOT_FOUND_TOAST);
-  }, [showToast]);
+  }, [showToast, historyDetailId]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -3538,7 +3678,22 @@ export default function App() {
     if (next !== "collections") {
       setCollectionDetailSelection(null);
     }
+    if (next !== "history-detail") {
+      setHistoryDetailId(null);
+    }
+    if (next === "recommend") {
+      setRecommendCategoryId(null);
+      setRecommendNonce((n) => n + 1);
+    }
+    if (next === "history") {
+      setHistoryNonce((n) => n + 1);
+    }
     setPage(next);
+  }, []);
+
+  const openHistoryDetail = useCallback((historyId: string) => {
+    setHistoryDetailId(historyId);
+    setPage("history-detail");
   }, []);
 
   const renderPage = () => {
@@ -3549,6 +3704,7 @@ export default function App() {
             setPage={setPage}
             openAddItem={() => openCreateItem({ origin: "home" })}
             openItemDetail={(id) => openItemDetail(id, "home")}
+            openHistoryDetail={openHistoryDetail}
           />
         );
       case "search":
@@ -3561,8 +3717,40 @@ export default function App() {
           />
         );
       case "recommend":
+        return (
+          <RecommendPage
+            key={recommendNonce}
+            showToast={showToast}
+            openItemDetail={(id) => openItemDetail(id, "recommend")}
+            onOpenHistory={() => {
+              setHistoryNonce((n) => n + 1);
+              setPage("history");
+            }}
+            initialCategoryId={recommendCategoryId}
+          />
+        );
       case "history":
+        return (
+          <HistoryPage
+            key={historyNonce}
+            showToast={showToast}
+            openHistoryDetail={openHistoryDetail}
+          />
+        );
       case "history-detail":
+        return historyDetailId ? (
+          <HistoryDetailPage
+            key={historyDetailId}
+            historyId={historyDetailId}
+            onBack={() => {
+              setHistoryDetailId(null);
+              setHistoryNonce((n) => n + 1);
+              setPage("history");
+            }}
+            openItemDetail={(id) => openItemDetail(id, "history")}
+            showToast={showToast}
+          />
+        ) : null;
       case "data":
         return null;
       case "items":

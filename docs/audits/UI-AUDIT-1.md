@@ -426,3 +426,12 @@ SearchPage
 - Frontend Auth Bootstrap·Auth UI·`credentials:include`·401/로그아웃 State 클리어 · Header/Settings 실제 login_id.
 - Migration `0007_add_auth_tables`는 **격리 DB만** 검증. 실DB/운영·실제 SMTP·Credential CLI는 미적용.
 - 설계 문서: `docs/11-authentication-plan.md`.
+
+## Post-Audit Progress (REC-1, 2026-07-27)
+
+- 랜덤 추천 **한 종류만** 복원. 순차·혼합·`recommendation_type` 컬럼 없음. Alembic Head 유지 `0007`.
+- Backend: `POST /recommendations/random`, History CRUD, Collection 단위 후보, 이걸로 선택 시에만 Snapshot.
+- Frontend: Recommend/History 메뉴 복원, Home 빠른 추천·최근 선택 API, Mock HISTORY 런타임 미사용.
+- **보완:** 최근 선택 History 후보 제외(`RECENT_HISTORY_EXCLUDE_COUNT`) **완전 제거**. History는 기록·조회·Home 표시만. 매 요청 독립 랜덤.
+- 격리 DB pytest 통과. Frontend `tsc`·`build` 통과. 실DB Migration·History Row 미적용.
+- 문서: `docs/03-recommendation-rules.md`, `docs/12-random-recommendation-history.md`.

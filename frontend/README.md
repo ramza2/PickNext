@@ -167,12 +167,14 @@ Secret·TMDB Token은 Frontend 환경변수에 두지 않습니다.
 | 화면 | 출처 |
 | --- | --- |
 | Home — Summary / Categories / 최근 등록 | **API** |
-| Home — 빠른 추천 / 최근 선택 이력 | Mock |
+| Home — 빠른 추천 / 최근 선택 | **API** (REC-1) |
 | Items — Category / 목록 검색·필터·정렬·페이지 | **API** |
 | Item Detail | **API** (`GET /items/{id}`) · **생성·수정(I-2)** · **삭제(D-7)** · 상태 버튼 PATCH · Poster Placeholder |
 | Collections 목록 | **API** (검색·페이지) · **생성(C-2)** |
 | Collection 인라인 상세 / 소속 Item | **API** · **이름 수정(C-2)** · **삭제(D-7)** · Item 추가(I-2) · Item 행 「제거」= 연결 해제(I-3) · 빠른 상태(I-3) |
-| History / Recommend / Data / Settings | Mock / 숨김·정리 |
+| Recommend / History | **API** (REC-1, 랜덤 전용) |
+| Data | 숨김 (미구현) |
+| Settings | Auth 계정 정보 · Category 보기 · 로그아웃 |
 | TMDB Search·등록 | **API (TMDB-2)** |
 
 API 오류 시 Mock으로 조용히 Fallback하지 않습니다.

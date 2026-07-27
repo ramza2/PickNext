@@ -176,8 +176,8 @@ frontend/
 
 | 기획 | Figma Mock 현황 | 연동 시 조치 |
 | --- | --- | --- |
-| Collection = 추천 후보 1개, 소속 Item 개별 제외 | RecommendPage `buildPool`에 **이미 반영** | Backend API와 동일 규칙 유지 |
-| 최근 선택 제외 (Item+Collection) | Item만 `HISTORY.slice(0,3)` 체크, Collection 제외 미흡 | API `exclude_recent`에 맡김 |
+| Collection = 추천 후보 1개, 소속 Item 개별 제외 | Backend `list_eligible_candidates` | REC-1 구현 |
+| 최근 선택 제외 | **제거됨** — History는 후보에 영향 없음 | Home 최근 선택은 표시만 |
 | TMDB 등록 Form + Category 확인 | UI 존재, 저장은 toast | `POST /items/from-tmdb` |
 | 새 Collection 생성 | 등록 Form에 기존 Collection 선택만 | Form에 「새 Collection」 옵션 추가 (UI 확장 최소) |
 | 평점 0.5 단위 | StarPicker **정수만** | 0.5 UI로 보정 (시각 동일 계열) |

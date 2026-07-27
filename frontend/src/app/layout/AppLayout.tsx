@@ -1,32 +1,39 @@
 import { useState, type ReactNode } from "react";
 import {
-  Home, Search, List, Folder, Settings,
+  Home, Search, List, Folder, Settings, Shuffle, Clock,
   Plus, Target, MoreHorizontal, ChevronRight,
 } from "lucide-react";
 import type { Page } from "../pageTypes";
 
-/** Operational nav only — recommend/history/data hidden until real APIs exist. */
 const NAV: { id: Page; label: string; icon: ReactNode }[] = [
   { id: "home", label: "홈", icon: <Home size={17} /> },
+  { id: "recommend", label: "랜덤 추천", icon: <Shuffle size={17} /> },
   { id: "search", label: "콘텐츠 검색", icon: <Search size={17} /> },
   { id: "items", label: "전체 항목", icon: <List size={17} /> },
   { id: "collections", label: "Collection", icon: <Folder size={17} /> },
+  { id: "history", label: "추천 이력", icon: <Clock size={17} /> },
   { id: "settings", label: "설정", icon: <Settings size={17} /> },
 ];
 
 const MOBILE_PRIMARY = NAV.filter((item) =>
-  item.id === "home" || item.id === "search" || item.id === "items",
+  item.id === "home" || item.id === "recommend" || item.id === "items",
 );
 const MORE_NAV = NAV.filter((item) =>
-  item.id === "collections" || item.id === "settings",
+  item.id === "search" ||
+  item.id === "collections" ||
+  item.id === "history" ||
+  item.id === "settings",
 );
-const TOP_PAGES = new Set<Page>(["item-detail", "category-manage"]);
+const TOP_PAGES = new Set<Page>(["item-detail", "category-manage", "history-detail"]);
 
 const TITLES: Partial<Record<Page, string>> = {
   home: "홈",
+  recommend: "랜덤 추천",
   search: "영화·드라마 검색",
   items: "전체 항목",
   collections: "Collection",
+  history: "추천 이력",
+  "history-detail": "추천 이력 상세",
   settings: "설정",
   "item-detail": "항목 상세",
   "category-manage": "Category",
@@ -164,7 +171,11 @@ export default function AppLayout({
               >
                 {item.icon}
                 <span className="text-[9px] font-medium">
-                  {item.id === "search" ? "검색" : item.id === "items" ? "항목" : item.label}
+                  {item.id === "recommend"
+                    ? "추천"
+                    : item.id === "items"
+                      ? "항목"
+                      : item.label}
                 </span>
               </button>
             ))}
