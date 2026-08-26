@@ -8,8 +8,8 @@ import type { Page } from "../pageTypes";
 const NAV: { id: Page; label: string; icon: ReactNode }[] = [
   { id: "home", label: "홈", icon: <Home size={17} /> },
   { id: "recommend", label: "랜덤 추천", icon: <Shuffle size={17} /> },
-  { id: "search", label: "콘텐츠 검색", icon: <Search size={17} /> },
   { id: "items", label: "전체 항목", icon: <List size={17} /> },
+  { id: "search", label: "콘텐츠 검색", icon: <Search size={17} /> },
   { id: "collections", label: "Collection", icon: <Folder size={17} /> },
   { id: "history", label: "추천 이력", icon: <Clock size={17} /> },
   { id: "settings", label: "설정", icon: <Settings size={17} /> },

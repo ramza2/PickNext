@@ -460,3 +460,9 @@ SearchPage
 - AppOverlay 확장: `item-collection-picker`, `collection-add-existing-items` (NAV Overlay Back 유지).
 - Migration 없음 · Alembic Head `0007` 유지 · 실DB 변경 없음.
 - 문서: `docs/14-collection-management.md`.
+
+## Post-Audit Progress (NAV-2, 2026-08-26)
+
+- Desktop Sidebar `NAV` 배열에서 `전체 항목`을 `콘텐츠 검색`보다 앞에 배치.
+- Mobile Bottom Primary / More Sheet는 기존 그룹 유지(항목은 Primary, 검색은 More). Route·Label·Icon·History 변경 없음.
+- Backend/API/DB/Migration 변경 없음.
