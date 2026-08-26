@@ -4,7 +4,7 @@ import {
   Search, Shuffle, Plus, Star, AlignJustify,
   Grid, X, RefreshCw, Edit2, MoreVertical, ChevronLeft, ChevronRight,
   CheckCircle, Layers, Trash2, Check,
-  ChevronsLeft, ChevronsRight, Palette,
+  Palette,
 } from "lucide-react";
 import { CollectionPickerModal } from "./collections/CollectionPickerModal";
 import { AddExistingItemsModal } from "./collections/AddExistingItemsModal";
@@ -55,6 +55,7 @@ import {
 } from "./mappers/itemDetail";
 import { formatDate } from "../utils/date";
 import { ContentPoster, formatReleaseYearMeta } from "./components/ContentPoster";
+import { ListPaginationBar } from "./components/ListPaginationBar";
 import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories, getAllCollectionsForSelect } from "../api/catalog";
 import {
   collectionCreateFailureToast,
@@ -2211,39 +2212,15 @@ function ItemsPage({
       )}
 
       {/* Pagination */}
-      {!itemsError && totalPages > 1 && (
-        <div className="flex items-center justify-between mt-5">
-          <p className="text-xs text-muted-foreground">
-            {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}건
-          </p>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage(1)} disabled={!hasPrevious}
-              className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
-              <ChevronsLeft size={14}/>
-            </button>
-            <button onClick={() => setPage(page - 1)} disabled={!hasPrevious}
-              className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
-              <ChevronLeft size={14}/>
-            </button>
-            {Array.from({length:Math.min(5,totalPages)},(_,i) => {
-              const p = Math.min(Math.max(page-2,1)+i, totalPages);
-              return (
-                <button key={`${p}-${i}`} onClick={() => setPage(p)}
-                  className={`w-7 h-7 rounded-lg text-xs font-medium border transition-colors ${page===p?"border-primary bg-primary text-white":"border-border text-foreground hover:bg-muted"}`}>
-                  {p}
-                </button>
-              );
-            })}
-            <button onClick={() => setPage(page + 1)} disabled={!hasNext}
-              className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
-              <ChevronRight size={14}/>
-            </button>
-            <button onClick={() => setPage(totalPages)} disabled={!hasNext}
-              className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors">
-              <ChevronsRight size={14}/>
-            </button>
-          </div>
-        </div>
+      {!itemsError && (
+        <ListPaginationBar
+          page={page}
+          totalPages={totalPages}
+          hasPrevious={hasPrevious}
+          hasNext={hasNext}
+          onPageChange={setPage}
+          summary={`${rangeStart}–${rangeEnd} / ${total.toLocaleString("ko-KR")}건`}
+        />
       )}
     </div>
   );
@@ -2553,67 +2530,19 @@ function CollectionsPage({
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-5">
-              <p className="text-xs text-muted-foreground">
+          <ListPaginationBar
+            page={page}
+            totalPages={totalPages}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
+            onPageChange={setPage}
+            summary={
+              <>
                 {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}개
                 {totalPages > 0 ? ` · ${page}/${totalPages}페이지` : ""}
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPage(1)}
-                  disabled={!hasPrevious}
-                  aria-label="첫 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronsLeft size={14}/>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage(page - 1)}
-                  disabled={!hasPrevious}
-                  aria-label="이전 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft size={14}/>
-                </button>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const p = Math.min(Math.max(page - 2, 1) + i, totalPages);
-                  return (
-                    <button
-                      key={`${p}-${i}`}
-                      type="button"
-                      onClick={() => setPage(p)}
-                      aria-label={`${p}페이지`}
-                      aria-current={page === p ? "page" : undefined}
-                      className={`w-7 h-7 rounded-lg text-xs font-medium border transition-colors ${page === p ? "border-primary bg-primary text-white" : "border-border text-foreground hover:bg-muted"}`}
-                    >
-                      {p}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => setPage(page + 1)}
-                  disabled={!hasNext}
-                  aria-label="다음 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronRight size={14}/>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage(totalPages)}
-                  disabled={!hasNext}
-                  aria-label="마지막 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronsRight size={14}/>
-                </button>
-              </div>
-            </div>
-          )}
+              </>
+            }
+          />
         </>
       )}
 
@@ -3202,67 +3131,19 @@ function CollectionDetailInline({
             })}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-5">
-              <p className="text-xs text-muted-foreground">
+          <ListPaginationBar
+            page={page}
+            totalPages={totalPages}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
+            onPageChange={setPage}
+            summary={
+              <>
                 {rangeStart}–{rangeEnd} / {total.toLocaleString("ko-KR")}건
                 {totalPages > 0 ? ` · ${page}/${totalPages}페이지` : ""}
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPage(1)}
-                  disabled={!hasPrevious}
-                  aria-label="첫 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronsLeft size={14}/>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage(page - 1)}
-                  disabled={!hasPrevious}
-                  aria-label="이전 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft size={14}/>
-                </button>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const p = Math.min(Math.max(page - 2, 1) + i, totalPages);
-                  return (
-                    <button
-                      key={`${p}-${i}`}
-                      type="button"
-                      onClick={() => setPage(p)}
-                      aria-label={`${p}페이지`}
-                      aria-current={page === p ? "page" : undefined}
-                      className={`w-7 h-7 rounded-lg text-xs font-medium border transition-colors ${page === p ? "border-primary bg-primary text-white" : "border-border text-foreground hover:bg-muted"}`}
-                    >
-                      {p}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => setPage(page + 1)}
-                  disabled={!hasNext}
-                  aria-label="다음 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronRight size={14}/>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage(totalPages)}
-                  disabled={!hasNext}
-                  aria-label="마지막 페이지"
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronsRight size={14}/>
-                </button>
-              </div>
-            </div>
-          )}
+              </>
+            }
+          />
         </>
       )}
 
