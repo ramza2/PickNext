@@ -397,8 +397,16 @@ pytest -q
 | `AUTH_CODE_PEPPER` | 인증번호 HMAC Secret (**필수**, 커밋 금지) |
 | `AUTH_COOKIE_SECURE` | Secure Cookie (로컬 false · 운영 true) |
 | `SMTP_*` | 이메일 발송 (Naver SSL 465 권장) |
+| `OPS_DATABASE_MAINTENANCE_ENABLED` | DB 백업·복원 기능 스위치 (기본 false) |
+| `OPS_MAINTENANCE_ADMIN_LOGIN_ID` | 백업·복원 허용 `login_id` (저장소에 실값 금지) |
+| `OPS_BACKUP_DIR` | Safety Backup 디렉터리 (기본 `/app/backups`) |
+| `OPS_BACKUP_RETENTION` | OPS-1 `pre-restore-*.zip` 보관 개수 (기본 5) |
+| `OPS_BACKUP_MAX_UPLOAD_BYTES` | 복원 Upload 상한 (기본 1GiB) |
+| `OPS_RESTORE_TOKEN_TTL_SECONDS` | Inspect Token TTL (기본 900) |
 
 `.env`는 커밋하지 않습니다. `.env.example`만 저장소에 포함합니다.
+
+Database backup/restore 설계·운영 주의사항은 `docs/15-database-backup-restore.md`를 참고합니다.
 
 ## 현재 구현 범위
 
@@ -412,6 +420,7 @@ pytest -q
 - **AUTH-1:** Session Cookie 인증 · 회원가입/복구 · Frontend Auth UI
 - Frontend Home·Items·Collections·Item Detail·TMDB Search 실연동
 - **REC-1:** 랜덤 추천 · 이걸로 선택 · 추천 이력 목록/상세/삭제 · Home 최근 선택
+- **OPS-1:** Settings 데이터 관리 · PostgreSQL 16 ZIP 백업/복원 (환경변수 관리자 Gate)
 
 ## 이번 범위에서 제외
 

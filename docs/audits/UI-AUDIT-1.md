@@ -4,6 +4,8 @@
 > **HEAD:** `e991aac` (`feat(data): 로컬 DB 백업·DPL-3 원격 복원 스크립트 추가`)  
 > **범위:** Frontend·Backend·저장소 기획 문서 조사 (제품 코드 변경 없음)  
 > **운영 DB:** 미조회 · **원격 수정:** 없음 · **런타임 Browser Network:** 미수행 (소스 추적으로 대체)
+>
+> **후속 (OPS-1):** Settings에 운영자 전용 데이터베이스 백업·복원이 추가되었다. 본 Audit의 Settings NO_OP 목록은 작성 시점 기준이며, 데이터 관리 구현은 `docs/15-database-backup-restore.md`를 따른다.
 
 ---
 

@@ -10,9 +10,14 @@ from app.api.v1 import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.integrations.tmdb.client import TmdbClient
+from app.services import ops_lock
 from app.services.tmdb_service import TmdbService
 
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_MAINTENANCE_ALLOW_PREFIXES = (
+    "/api/v1/health",
+    "/api/v1/settings/database-restore/execute",
+)
 
 
 class OriginAllowlistMiddleware(BaseHTTPMiddleware):
@@ -29,6 +34,32 @@ class OriginAllowlistMiddleware(BaseHTTPMiddleware):
                         status_code=403,
                         media_type="application/json",
                     )
+        return await call_next(request)
+
+
+class DatabaseMaintenanceMiddleware(BaseHTTPMiddleware):
+    """Block general API traffic while database restore cutover is active."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
+        if ops_lock.is_maintenance():
+            path = request.url.path
+            # Keep Docker healthcheck green without opening a DB session.
+            if path == "/api/v1/health" or path.startswith("/api/v1/health?"):
+                return Response(
+                    content='{"status":"ok","database":"connected"}',
+                    status_code=200,
+                    media_type="application/json",
+                )
+            allowed = any(
+                path == prefix or path.startswith(prefix)
+                for prefix in _MAINTENANCE_ALLOW_PREFIXES
+            )
+            if path.startswith("/api/v1/") and not allowed:
+                return Response(
+                    content='{"detail":"Database maintenance in progress"}',
+                    status_code=503,
+                    media_type="application/json",
+                )
         return await call_next(request)
 
 
@@ -61,6 +92,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=lifespan,
     )
+    application.add_middleware(DatabaseMaintenanceMiddleware)
     application.add_middleware(OriginAllowlistMiddleware)
     application.add_middleware(
         CORSMiddleware,

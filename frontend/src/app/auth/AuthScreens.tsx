@@ -75,6 +75,30 @@ function LinkButton({
   );
 }
 
+const RESTORE_NOTICE_KEY = "picknext.ops.restore_notice";
+
+export function consumeDatabaseRestoreNotice(): string | null {
+  try {
+    const value = sessionStorage.getItem(RESTORE_NOTICE_KEY);
+    if (!value) return null;
+    sessionStorage.removeItem(RESTORE_NOTICE_KEY);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export function markDatabaseRestoreNotice(): void {
+  try {
+    sessionStorage.setItem(
+      RESTORE_NOTICE_KEY,
+      "데이터베이스 복원이 완료되었습니다. 보안을 위해 다시 로그인해 주세요.",
+    );
+  } catch {
+    // Ignore storage failures; login still works.
+  }
+}
+
 export function LoginView({
   onLoggedIn,
   onNavigate,
@@ -86,6 +110,7 @@ export function LoginView({
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(() => consumeDatabaseRestoreNotice());
   const [pending, setPending] = useState(false);
 
   const submit = async (event: FormEvent) => {
@@ -147,6 +172,11 @@ export function LoginView({
           />
           자동 로그인
         </label>
+        {info && (
+          <p className="text-sm text-emerald-700" role="status">
+            {info}
+          </p>
+        )}
         <ErrorText message={error} />
         <button
           type="submit"

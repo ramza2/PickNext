@@ -110,8 +110,10 @@ import {
   LoginView,
   PasswordResetView,
   SignupView,
+  markDatabaseRestoreNotice,
   type AuthView,
 } from "./auth/AuthScreens";
+import { DatabaseMaintenanceSection } from "./settings/DatabaseMaintenanceSection";
 import {
   collectionDeleteErrorMessage,
   itemDeleteErrorMessage,
@@ -3201,10 +3203,14 @@ function SettingsPage({
   setPage,
   authUser,
   onLogout,
+  showToast,
+  onRestoreCompleted,
 }: {
   setPage: (p: Page) => void;
   authUser: AuthUser | null;
   onLogout: () => void;
+  showToast: (message: string) => void;
+  onRestoreCompleted: () => void;
 }) {
   return (
     <div className="max-w-xl mx-auto px-4 sm:px-6 py-6 space-y-4">
@@ -3245,6 +3251,10 @@ function SettingsPage({
           <ChevronRight size={14} className="text-muted-foreground flex-shrink-0"/>
         </button>
       </div>
+      <DatabaseMaintenanceSection
+        showToast={showToast}
+        onRestoreCompleted={onRestoreCompleted}
+      />
     </div>
   );
 }
@@ -3898,6 +3908,18 @@ export default function App() {
     clearProtectedState();
   }, [clearProtectedState]);
 
+  const handleDatabaseRestoreCompleted = useCallback(() => {
+    markDatabaseRestoreNotice();
+    if (redirecting401.current) {
+      return;
+    }
+    redirecting401.current = true;
+    resetLocalData();
+    setAuthUser(null);
+    setAuthStatus("unauthenticated");
+    replace({ name: "login" });
+  }, [replace, resetLocalData]);
+
   const navigateFromLayout = useCallback((next: Page) => {
     if (HIDDEN_PAGES.has(next)) {
       navigate({ name: "home" });
@@ -4028,6 +4050,8 @@ export default function App() {
             setPage={setPageCompat}
             authUser={authUser}
             onLogout={() => void handleLogout()}
+            showToast={showToast}
+            onRestoreCompleted={handleDatabaseRestoreCompleted}
           />
         );
       case "item-detail":

@@ -12,6 +12,8 @@
 > **TMDB-2 요약:** `SearchPage`가 `GET /tmdb/status|search|details` + `POST /items/from-tmdb` 연동. Detail Panel·Register Form·등록됨 UX·`searchSnapshot`/`origin:"search"` 복귀. Collection「TMDB 검색 후 추가」→ Search 이동.
 > **TMDB-3 요약:** Item API `release_year`·`synopsis`·`poster_url`/`backdrop_url`. 수동 Form 출시년도·줄거리. 목록·상세·Collection·Home Poster·연도. Item 상세 줄거리는 DB `synopsis`(TMDB overview). Placeholder 유지. Frontend TMDB URL 조립·`VITE_TMDB_*` 없음.
 > **AUTH-1 요약:** `credentials:include` · Bootstrap `/auth/me` · Login/Signup/FindId/PasswordReset · Header·Settings에 실제 `login_id`/로그아웃 · 401 시 보호 State 클리어. 설계: `docs/11-authentication-plan.md`.
+>
+> **OPS-1 요약:** Settings → 데이터 관리 · 환경변수 관리자 Gate · PostgreSQL Custom ZIP 백업/복원 · 상세: `docs/15-database-backup-restore.md`.
 ## 1. 실행·빌드 확인 결과
 
 | 항목 | 결과 |

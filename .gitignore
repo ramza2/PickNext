@@ -58,7 +58,8 @@ postgres-data/
 
 # DB transfer / restore artifacts (never commit dumps)
 /db-transfer/
-/backups/
+/backups/*
+!/backups/.gitkeep
 *.dump
 *.backup
 *.sql.gz

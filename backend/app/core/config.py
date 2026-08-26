@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     tmdb_backdrop_size: str = "w780"
     tmdb_profile_size: str = "w185"
 
+    # OPS-1 database maintenance (no admin role Migration — env gate only).
+    ops_database_maintenance_enabled: bool = False
+    ops_maintenance_admin_login_id: str | None = None
+    ops_backup_dir: str = "/app/backups"
+    ops_backup_retention: int = 5
+    ops_backup_max_upload_bytes: int = 1_073_741_824
+    ops_restore_token_ttl_seconds: int = 900
+
     @field_validator("tmdb_api_key", "tmdb_api_read_access_token", "smtp_password", mode="before")
     @classmethod
     def empty_secret_as_none(cls, value: object) -> object:
@@ -80,7 +88,12 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("smtp_username", "smtp_from_email", mode="before")
+    @field_validator(
+        "smtp_username",
+        "smtp_from_email",
+        "ops_maintenance_admin_login_id",
+        mode="before",
+    )
     @classmethod
     def empty_str_as_none(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
@@ -95,6 +108,12 @@ class Settings(BaseSettings):
             raise ValueError("SMTP_PORT must be between 1 and 65535")
         if self.smtp_timeout_seconds <= 0:
             raise ValueError("SMTP_TIMEOUT_SECONDS must be positive")
+        if self.ops_backup_retention < 1:
+            raise ValueError("OPS_BACKUP_RETENTION must be >= 1")
+        if self.ops_backup_max_upload_bytes < 1_048_576:
+            raise ValueError("OPS_BACKUP_MAX_UPLOAD_BYTES must be >= 1MiB")
+        if self.ops_restore_token_ttl_seconds < 60:
+            raise ValueError("OPS_RESTORE_TOKEN_TTL_SECONDS must be >= 60")
         pepper = self.auth_code_pepper.get_secret_value().strip()
         if len(pepper) < 16:
             raise ValueError("AUTH_CODE_PEPPER must be a long random secret")

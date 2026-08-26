@@ -41,7 +41,7 @@ function joinUrl(base: string, path: string): string {
   return `${base}${normalizedPath}`;
 }
 
-function messageFromDetail(detail: unknown, fallback: string): string {
+export function messageFromDetail(detail: unknown, fallback: string): string {
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail) && detail.length > 0) {
     const parts = detail
