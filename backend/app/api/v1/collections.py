@@ -7,6 +7,8 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models import ItemStatus, User
 from app.schemas import (
+    CollectionAddItemsRequest,
+    CollectionAddItemsResponse,
     CollectionCreate,
     CollectionListResponse,
     CollectionResponse,
@@ -90,6 +92,30 @@ def update_collection(
     user: User = Depends(get_current_user),
 ) -> CollectionResponse:
     return CollectionResponse(**catalog.update_collection(db, user, collection_id, payload.name))
+
+
+@router.post(
+    "/collections/{collection_id}/items",
+    response_model=CollectionAddItemsResponse,
+    responses={
+        404: {"description": "Collection or Item not found"},
+        409: {"description": "Item already belongs to another collection"},
+        422: {"description": "Validation Error"},
+    },
+)
+def add_collection_items(
+    collection_id: UUID,
+    payload: CollectionAddItemsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CollectionAddItemsResponse:
+    result = catalog.add_items_to_collection(
+        db,
+        user,
+        collection_id,
+        payload.item_ids,
+    )
+    return CollectionAddItemsResponse(**result)
 
 
 @router.delete(

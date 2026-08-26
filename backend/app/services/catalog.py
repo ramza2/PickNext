@@ -798,6 +798,93 @@ def delete_collection(
         raise
 
 
+def add_items_to_collection(
+    db: Session,
+    user: User,
+    collection_id: UUID,
+    item_ids: list[UUID],
+    *,
+    commit: bool = True,
+) -> dict[str, int]:
+    """Attach unassigned owned items to a collection in one transaction.
+
+    Rules:
+    - Target collection must belong to the user (else 404).
+    - Every item_id must belong to the user (else 404; no existence leak).
+    - Items already in the target collection are idempotent no-ops.
+    - Items assigned to a different collection cause 409 with no partial writes.
+    """
+    if not item_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="item_ids must not be empty",
+        )
+
+    collection = _lock_owned_collection(db, user.id, collection_id)
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Collection not found",
+        )
+
+    ordered_ids = sorted(item_ids, key=str)
+    locked_items = list(
+        db.scalars(
+            select(Item)
+            .where(Item.user_id == user.id, Item.id.in_(ordered_ids))
+            .order_by(Item.id)
+            .with_for_update()
+        ).all()
+    )
+    if len(locked_items) != len(ordered_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+
+    by_id = {item.id: item for item in locked_items}
+    # Validate before mutating so conflict does not leave partial changes
+    # and does not require a session.rollback() that breaks nested test txs.
+    for item_id in item_ids:
+        item = by_id[item_id]
+        if item.collection_id is not None and item.collection_id != collection_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Item already belongs to another collection",
+            )
+
+    added_count = 0
+    try:
+        for item_id in item_ids:
+            item = by_id[item_id]
+            if item.collection_id == collection_id:
+                continue
+            item.collection_id = collection_id
+            added_count += 1
+
+        db.flush()
+        if commit:
+            db.commit()
+        return {"added_count": added_count}
+    except HTTPException:
+        if commit:
+            db.rollback()
+        raise
+    except IntegrityError as exc:
+        if commit:
+            db.rollback()
+        if _is_known_item_write_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Related resource changed",
+            ) from exc
+        raise
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
 def _is_collection_name_unique_violation(exc: IntegrityError) -> bool:
     orig = getattr(exc, "orig", None)
     if orig is not None:

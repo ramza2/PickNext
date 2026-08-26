@@ -158,6 +158,31 @@ class CollectionUpdate(BaseModel):
         return _normalize_collection_name(value)
 
 
+class CollectionAddItemsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize_item_ids(self) -> "CollectionAddItemsRequest":
+        # Preserve first-seen order while dropping duplicates.
+        seen: set[UUID] = set()
+        unique: list[UUID] = []
+        for item_id in self.item_ids:
+            if item_id in seen:
+                continue
+            seen.add(item_id)
+            unique.append(item_id)
+        self.item_ids = unique
+        if not self.item_ids:
+            raise ValueError("item_ids must not be empty")
+        return self
+
+
+class CollectionAddItemsResponse(BaseModel):
+    added_count: int
+
+
 class ItemCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -440,6 +465,8 @@ __all__ = [
     "CategoryListResponse",
     "CategoryRef",
     "CategoryResponse",
+    "CollectionAddItemsRequest",
+    "CollectionAddItemsResponse",
     "CollectionCategoryCount",
     "CollectionCreate",
     "CollectionListResponse",

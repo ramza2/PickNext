@@ -49,7 +49,10 @@ interface PickNextHistoryState {
   entryId: string;
   navIndex: number;
   routeName: string;
-  overlay?: { type: "item-edit"; itemId: string };
+  overlay?:
+    | { type: "item-edit"; itemId: string }
+    | { type: "item-collection-picker"; itemId: string }
+    | { type: "collection-add-existing-items"; collectionId: string };
 }
 ```
 
@@ -63,6 +66,15 @@ interface PickNextHistoryState {
 - `closeOverlay()`는 현재 overlay entry면 `history.back()`으로 닫고, 비정상 상태는 안전하게 local close.
 - Modal 표시 기준은 `currentOverlay?.type === "item-edit"` + `route.itemId` 일치.
 - 초기 bootstrap(`ensureInitialHistoryMeta`)에서는 overlay를 제거해 새로고침 시 Modal을 자동 복원하지 않음.
+
+## 3B. Collection Overlays (COL-1)
+
+- `item-collection-picker`: Item 상세의 Collection 추가/변경 Modal. Route는 `item-detail` + 동일 `itemId`.
+- `collection-add-existing-items`: Collection 상세의 기존 항목 추가 Modal. Route는 `collections` + 동일 `collectionId`.
+- X · 취소 · Escape · Backdrop · Browser/PWA Back은 모두 `closeOverlay()` 공통 경로.
+- Overlay 종료 시 검색어·선택·Create Form 등 Local State는 초기화한다.
+- Forward로 Modal이 다시 열려도 Mutation을 자동 실행하지 않으며, 미저장 검색/선택은 복원하지 않아도 된다.
+- 자세한 기능 계약은 `docs/14-collection-management.md`.
 
 ## 4. push / replace / no-op
 

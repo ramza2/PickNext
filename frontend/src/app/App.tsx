@@ -6,6 +6,8 @@ import {
   CheckCircle, Layers, Trash2, Check,
   ChevronsLeft, ChevronsRight, Palette,
 } from "lucide-react";
+import { CollectionPickerModal } from "./collections/CollectionPickerModal";
+import { AddExistingItemsModal } from "./collections/AddExistingItemsModal";
 import type { Page } from "./pageTypes";
 import AppLayout from "./layout/AppLayout";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
@@ -1023,6 +1025,7 @@ function ItemDetailPage({
   collectionItemsPage,
   onDeleteSuccess,
   onEdit,
+  onOpenCollectionPicker,
   writeBusy,
 }: {
   itemId: string | null;
@@ -1039,6 +1042,7 @@ function ItemDetailPage({
     deletedItem: ApiItemDetail;
   }) => void | Promise<void>;
   onEdit?: (item: ApiItemDetail) => void;
+  onOpenCollectionPicker?: (item: ApiItemDetail) => void;
   writeBusy?: boolean;
 }) {
   const { item, isLoading, error, reload } = useItemDetail(itemId);
@@ -1349,11 +1353,11 @@ function ItemDetailPage({
           type="button"
           disabled={actionBusy || showDeleteConfirm}
           onClick={() => {
-            if (item && onEdit) onEdit(item);
+            if (item && onOpenCollectionPicker) onOpenCollectionPicker(item);
           }}
           className="w-full flex items-center gap-2 justify-center border border-border text-foreground py-3 rounded-xl font-medium hover:bg-muted transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Layers size={15}/> Collection 이동
+          <Layers size={15}/> {vm.collectionName ? "Collection 변경" : "Collection에 추가"}
         </button>
 
         <button
@@ -2297,6 +2301,8 @@ function CollectionsPage({
   openItemDetail,
   openAddItem,
   onNavigateToSearch,
+  onAddExistingItems,
+  collectionDetailRefreshNonce,
   itemWriteBusy,
 }: {
   showToast: (m: string) => void;
@@ -2314,6 +2320,8 @@ function CollectionsPage({
     collectionItemsPage?: number;
   }) => void;
   onNavigateToSearch: () => void;
+  onAddExistingItems?: (collectionId: string) => void;
+  collectionDetailRefreshNonce?: number;
   itemWriteBusy?: boolean;
 }) {
   const onSnapshotChangeRef = useRef(onSnapshotChange);
@@ -2408,6 +2416,7 @@ function CollectionsPage({
   if (selection) {
     return (
       <CollectionDetailInline
+        key={`${selection.collectionId}-${collectionDetailRefreshNonce ?? 0}`}
         collectionId={selection.collectionId}
         itemsPage={selection.itemsPage}
         onItemsPageChange={(itemsPage) =>
@@ -2417,6 +2426,7 @@ function CollectionsPage({
         openItemDetail={openItemDetail}
         openAddItem={openAddItem}
         onNavigateToSearch={onNavigateToSearch}
+        onAddExistingItems={() => onAddExistingItems?.(selection.collectionId)}
         itemWriteBusy={itemWriteBusy}
         showToast={showToast}
         onCollectionDeleted={() => {
@@ -2632,6 +2642,7 @@ function CollectionDetailInline({
   openItemDetail,
   openAddItem,
   onNavigateToSearch,
+  onAddExistingItems,
   itemWriteBusy,
   showToast,
   onCollectionDeleted,
@@ -2652,6 +2663,7 @@ function CollectionDetailInline({
     collectionItemsPage?: number;
   }) => void;
   onNavigateToSearch: () => void;
+  onAddExistingItems?: () => void;
   itemWriteBusy?: boolean;
   showToast: (m: string) => void;
   onCollectionDeleted: () => void;
@@ -3040,9 +3052,17 @@ function CollectionDetailInline({
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-foreground">항목 목록</h2>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <h2 className="text-sm font-semibold text-foreground flex-shrink-0">항목 목록</h2>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            disabled={collectionBusy}
+            onClick={() => onAddExistingItems?.()}
+            className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus size={12}/> 기존 항목 추가
+          </button>
           <button
             type="button"
             onClick={onNavigateToSearch}
@@ -3446,6 +3466,13 @@ export default function App() {
   const [itemFormSession, setItemFormSession] = useState<ItemFormSession | null>(null);
   const [itemWriteBusy, setItemWriteBusy] = useState(false);
   const [itemDetailNonce, setItemDetailNonce] = useState(0);
+  const [collectionDetailRefreshNonce, setCollectionDetailRefreshNonce] = useState(0);
+  const [collectionPickerItem, setCollectionPickerItem] =
+    useState<ApiItemDetail | null>(null);
+  const [addExistingCollection, setAddExistingCollection] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [lastHistoryDetailId, setLastHistoryDetailId] = useState<string | null>(null);
   const redirecting401 = useRef(false);
 
@@ -3455,6 +3482,15 @@ export default function App() {
     route.name === "item-detail"
     && currentOverlay?.type === "item-edit"
     && currentOverlay.itemId === route.itemId;
+  const isCollectionPickerOverlayOpen =
+    route.name === "item-detail"
+    && currentOverlay?.type === "item-collection-picker"
+    && currentOverlay.itemId === route.itemId;
+  const isAddExistingOverlayOpen =
+    route.name === "collections"
+    && Boolean(route.collectionId)
+    && currentOverlay?.type === "collection-add-existing-items"
+    && currentOverlay.collectionId === route.collectionId;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -3539,6 +3575,79 @@ export default function App() {
     route,
   ]);
 
+  // Keep Collection Picker in sync with History Overlay.
+  useEffect(() => {
+    if (!isCollectionPickerOverlayOpen) {
+      setCollectionPickerItem(null);
+      return;
+    }
+    if (route.name !== "item-detail") {
+      setCollectionPickerItem(null);
+      return;
+    }
+    if (collectionPickerItem?.id === route.itemId) return;
+
+    const itemId = route.itemId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const item = await getItem(itemId);
+        if (cancelled) return;
+        setCollectionPickerItem(item);
+      } catch {
+        if (cancelled) return;
+        setCollectionPickerItem(null);
+        closeOverlay();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    closeOverlay,
+    collectionPickerItem?.id,
+    isCollectionPickerOverlayOpen,
+    route,
+  ]);
+
+  // Keep Add Existing Items Modal in sync with History Overlay.
+  useEffect(() => {
+    if (!isAddExistingOverlayOpen) {
+      setAddExistingCollection(null);
+      return;
+    }
+    if (route.name !== "collections" || !route.collectionId) {
+      setAddExistingCollection(null);
+      return;
+    }
+    if (addExistingCollection?.id === route.collectionId) return;
+
+    const collectionId = route.collectionId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const collection = await getCollection(collectionId);
+        if (cancelled) return;
+        setAddExistingCollection({
+          id: collection.id,
+          name: collection.name,
+        });
+      } catch {
+        if (cancelled) return;
+        setAddExistingCollection(null);
+        closeOverlay();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    addExistingCollection?.id,
+    closeOverlay,
+    isAddExistingOverlayOpen,
+    route,
+  ]);
+
   // Sync collection detail selection from URL.
   useEffect(() => {
     if (route.name === "collections") {
@@ -3564,6 +3673,8 @@ export default function App() {
     setLastHistoryDetailId(null);
     setItemFormSession(null);
     setItemWriteBusy(false);
+    setCollectionPickerItem(null);
+    setAddExistingCollection(null);
     setToast(null);
     clearSessionCaches();
   }, [clearSessionCaches]);
@@ -3687,7 +3798,7 @@ export default function App() {
   const openEditItem = useCallback((item: ApiItemDetail) => {
     if (itemWriteBusy) return;
     if (itemFormSession?.mode === "create") return;
-    if (isItemEditOverlayOpen) return;
+    if (isItemEditOverlayOpen || isCollectionPickerOverlayOpen) return;
     setItemFormSession({
       mode: "edit",
       item,
@@ -3700,10 +3811,52 @@ export default function App() {
     itemDetailExtras,
     itemDetailOrigin,
     itemFormSession,
+    isCollectionPickerOverlayOpen,
     isItemEditOverlayOpen,
     itemWriteBusy,
     openOverlay,
   ]);
+
+  const openCollectionPicker = useCallback((item: ApiItemDetail) => {
+    if (itemWriteBusy) return;
+    if (itemFormSession?.mode === "create") return;
+    if (isItemEditOverlayOpen || isCollectionPickerOverlayOpen) return;
+    setCollectionPickerItem(item);
+    openOverlay({ type: "item-collection-picker", itemId: item.id });
+  }, [
+    isCollectionPickerOverlayOpen,
+    isItemEditOverlayOpen,
+    itemFormSession,
+    itemWriteBusy,
+    openOverlay,
+  ]);
+
+  const closeCollectionPicker = useCallback(() => {
+    if (itemWriteBusy) return;
+    if (isCollectionPickerOverlayOpen) {
+      closeOverlay();
+    } else {
+      setCollectionPickerItem(null);
+    }
+  }, [closeOverlay, isCollectionPickerOverlayOpen, itemWriteBusy]);
+
+  const openAddExistingItems = useCallback((collectionId: string) => {
+    if (itemWriteBusy || itemFormSession) return;
+    if (isAddExistingOverlayOpen) return;
+    openOverlay({
+      type: "collection-add-existing-items",
+      collectionId,
+    });
+  }, [isAddExistingOverlayOpen, itemFormSession, itemWriteBusy, openOverlay]);
+
+  const closeAddExistingItems = useCallback(() => {
+    if (itemWriteBusy) return;
+    if (isAddExistingOverlayOpen) {
+      closeOverlay();
+    } else {
+      setAddExistingCollection(null);
+    }
+  }, [closeOverlay, isAddExistingOverlayOpen, itemWriteBusy]);
 
   const handleItemCreated = useCallback(async (
     created: ApiItemDetail,
@@ -3977,10 +4130,14 @@ export default function App() {
             }
             openAddItem={(opts) => openCreateItem(opts)}
             onNavigateToSearch={() => navigate({ name: "search" })}
+            onAddExistingItems={openAddExistingItems}
+            collectionDetailRefreshNonce={collectionDetailRefreshNonce}
             itemWriteBusy={
               itemWriteBusy
               || itemFormSession?.mode === "create"
               || isItemEditOverlayOpen
+              || isCollectionPickerOverlayOpen
+              || isAddExistingOverlayOpen
             }
           />
         );
@@ -4004,10 +4161,12 @@ export default function App() {
             collectionItemsPage={itemDetailSelection?.collectionItemsPage}
             onDeleteSuccess={handleItemDeleteSuccess}
             onEdit={openEditItem}
+            onOpenCollectionPicker={openCollectionPicker}
             writeBusy={
               itemWriteBusy
               || itemFormSession?.mode === "create"
               || isItemEditOverlayOpen
+              || isCollectionPickerOverlayOpen
             }
             backLabel={
               itemDetailSelection?.origin === "collections"
@@ -4107,6 +4266,37 @@ export default function App() {
           onUpdated={handleItemUpdated}
           onItemMissing={handleEditItemMissing}
           onLockedCollectionMissing={handleLockedCollectionMissing}
+          showToast={showToast}
+        />
+      )}
+
+      {isCollectionPickerOverlayOpen && collectionPickerItem && (
+        <CollectionPickerModal
+          key={`picker-${collectionPickerItem.id}`}
+          open
+          item={collectionPickerItem}
+          onClose={closeCollectionPicker}
+          onAssigned={(updated) => {
+            setCollectionPickerItem(updated);
+            setItemDetailNonce((value) => value + 1);
+            if (itemDetailSelection?.origin === "collections") {
+              setCollectionDetailRefreshNonce((value) => value + 1);
+            }
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {isAddExistingOverlayOpen && addExistingCollection && (
+        <AddExistingItemsModal
+          key={`add-existing-${addExistingCollection.id}`}
+          open
+          collectionId={addExistingCollection.id}
+          collectionName={addExistingCollection.name}
+          onClose={closeAddExistingItems}
+          onAdded={async () => {
+            setCollectionDetailRefreshNonce((value) => value + 1);
+          }}
           showToast={showToast}
         />
       )}

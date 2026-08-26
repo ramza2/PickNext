@@ -180,6 +180,25 @@ export function updateItem(
   );
 }
 
+export interface CollectionAddItemsResponse {
+  added_count: number;
+}
+
+export function addExistingItemsToCollection(
+  collectionId: string,
+  itemIds: string[],
+  signal?: AbortSignal,
+): Promise<CollectionAddItemsResponse> {
+  return apiRequest<CollectionAddItemsResponse>(
+    `/collections/${encodeURIComponent(collectionId)}/items`,
+    {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds }),
+      signal,
+    },
+  );
+}
+
 /** Load all collections for Item Form select (paginated API). */
 export async function getAllCollectionsForSelect(
   signal?: AbortSignal,

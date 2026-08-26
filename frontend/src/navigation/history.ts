@@ -1,4 +1,4 @@
-/** Browser History helpers for NAV-1. */
+/** Browser History helpers for NAV-1 / COL-1 overlays. */
 
 import {
   buildPath,
@@ -11,13 +11,44 @@ export type AppOverlay =
   | {
       type: "item-edit";
       itemId: string;
+    }
+  | {
+      type: "item-collection-picker";
+      itemId: string;
+    }
+  | {
+      type: "collection-add-existing-items";
+      collectionId: string;
     };
 
 function isAppOverlay(value: unknown): value is AppOverlay {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
-  if (record.type !== "item-edit") return false;
-  return typeof record.itemId === "string" && isUuid(record.itemId);
+  if (record.type === "item-edit" || record.type === "item-collection-picker") {
+    return typeof record.itemId === "string" && isUuid(record.itemId);
+  }
+  if (record.type === "collection-add-existing-items") {
+    return typeof record.collectionId === "string" && isUuid(record.collectionId);
+  }
+  return false;
+}
+
+export function overlaysEqual(a: AppOverlay, b: AppOverlay): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === "item-edit" || a.type === "item-collection-picker") {
+    return (
+      a.itemId
+      === (b as { type: typeof a.type; itemId: string }).itemId
+    );
+  }
+  if (a.type === "collection-add-existing-items") {
+    return (
+      a.collectionId
+      === (b as { type: "collection-add-existing-items"; collectionId: string })
+        .collectionId
+    );
+  }
+  return false;
 }
 
 export function normalizeOverlayForRoute(
@@ -25,9 +56,16 @@ export function normalizeOverlayForRoute(
   overlay: AppOverlay | null | undefined,
 ): AppOverlay | null {
   if (!overlay) return null;
-  if (overlay.type === "item-edit") {
+  if (overlay.type === "item-edit" || overlay.type === "item-collection-picker") {
     if (route.name !== "item-detail") return null;
     if (overlay.itemId !== route.itemId) return null;
+    return overlay;
+  }
+  if (overlay.type === "collection-add-existing-items") {
+    if (route.name !== "collections") return null;
+    if (!route.collectionId || overlay.collectionId !== route.collectionId) {
+      return null;
+    }
     return overlay;
   }
   return null;

@@ -451,3 +451,12 @@ SearchPage
 - X/취소/ESC/Backdrop/저장 성공이 `closeOverlay()` 경로를 공통 사용.
 - same-route no-op 정책 유지, overlay 중복 push 방지, 새로고침 시 overlay 미복원.
 - Backend/API/DB/Migration 변경 없음. 격리 DB pytest 306 passed.
+
+## Post-Audit Progress (COL-1, 2026-08-26)
+
+- Item 상세 `Collection에 추가` / `Collection 변경` 전용 Picker Modal (전체 Item 수정 Modal 분리).
+- Collection 검색 · 선택 편입 · 새 Collection 생성 후 자동 편입 · Collection에서 제거.
+- Collection 상세 `기존 항목 추가`: 서버 검색·Filter·다중 선택·Bulk `POST /collections/{id}/items`.
+- AppOverlay 확장: `item-collection-picker`, `collection-add-existing-items` (NAV Overlay Back 유지).
+- Migration 없음 · Alembic Head `0007` 유지 · 실DB 변경 없음.
+- 문서: `docs/14-collection-management.md`.

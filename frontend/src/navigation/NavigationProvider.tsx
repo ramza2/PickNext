@@ -15,6 +15,7 @@ import {
   isPickNextHistoryState,
   normalizeOverlayForRoute,
   readHistoryState,
+  overlaysEqual,
   type AppOverlay,
   type PickNextHistoryState,
 } from "./history";
@@ -203,10 +204,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
     const normalized = normalizeOverlayForRoute(routeRef.current, overlay);
     if (!normalized) return;
     const active = overlayRef.current;
-    if (
-      active?.type === normalized.type
-      && active.itemId === normalized.itemId
-    ) {
+    if (active && overlaysEqual(active, normalized)) {
       return;
     }
 
