@@ -134,7 +134,9 @@ export function SearchPage({
   const didRevalidateRef = useRef(false);
 
   const resolvedTargetCollectionId =
-    targetCollectionId ?? initialSnapshot?.targetCollectionId ?? null;
+    targetCollectionId !== undefined
+      ? targetCollectionId
+      : (initialSnapshot?.targetCollectionId ?? null);
 
   const publishSnapshot = useCallback(
     (patch: Partial<SearchPageSnapshot>) => {
