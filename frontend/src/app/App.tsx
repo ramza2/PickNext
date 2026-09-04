@@ -7,6 +7,7 @@ import {
   Palette,
 } from "lucide-react";
 import { CollectionPickerModal } from "./collections/CollectionPickerModal";
+import { CollectionSelectField } from "./collections/CollectionSelectField";
 import { AddExistingItemsModal } from "./collections/AddExistingItemsModal";
 import type { Page } from "./pageTypes";
 import AppLayout from "./layout/AppLayout";
@@ -56,6 +57,7 @@ import {
 import { formatDate } from "../utils/date";
 import { ContentPoster, formatReleaseYearMeta } from "./components/ContentPoster";
 import { ListPaginationBar } from "./components/ListPaginationBar";
+import { ClearableSearchInput } from "./components/ClearableSearchInput";
 import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories, getAllCollectionsForSelect } from "../api/catalog";
 import {
   collectionCreateFailureToast,
@@ -2298,7 +2300,7 @@ function CollectionsPage({
     lockedCollection: { id: string; name: string };
     collectionItemsPage?: number;
   }) => void;
-  onNavigateToSearch: () => void;
+  onNavigateToSearch: (collectionId: string) => void;
   onAddExistingItems?: (collectionId: string) => void;
   collectionDetailRefreshNonce?: number;
   itemWriteBusy?: boolean;
@@ -2593,7 +2595,7 @@ function CollectionDetailInline({
     lockedCollection: { id: string; name: string };
     collectionItemsPage?: number;
   }) => void;
-  onNavigateToSearch: () => void;
+  onNavigateToSearch: (collectionId: string) => void;
   onAddExistingItems?: () => void;
   itemWriteBusy?: boolean;
   showToast: (m: string) => void;
@@ -2996,7 +2998,7 @@ function CollectionDetailInline({
           </button>
           <button
             type="button"
-            onClick={onNavigateToSearch}
+            onClick={() => onNavigateToSearch(collectionId)}
             className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1"
           >
             <Search size={12}/> TMDB 검색 후 추가
@@ -3978,6 +3980,7 @@ export default function App() {
             openItemDetail={(id) => openItemDetail(id, "search")}
             initialSnapshot={searchSnapshot}
             onSnapshotChange={setSearchSnapshot}
+            targetCollectionId={route.collectionId ?? null}
           />
         );
       case "recommend":
@@ -4032,7 +4035,9 @@ export default function App() {
               openItemDetail(itemId, "collections", context)
             }
             openAddItem={(opts) => openCreateItem(opts)}
-            onNavigateToSearch={() => navigate({ name: "search" })}
+            onNavigateToSearch={(collectionId) =>
+              navigate({ name: "search", collectionId })
+            }
             onAddExistingItems={openAddExistingItems}
             collectionDetailRefreshNonce={collectionDetailRefreshNonce}
             itemWriteBusy={
@@ -4178,6 +4183,7 @@ export default function App() {
       {isCollectionPickerOverlayOpen && collectionPickerItem && (
         <CollectionPickerModal
           key={`picker-${collectionPickerItem.id}`}
+          mode="immediate"
           open
           item={collectionPickerItem}
           onClose={closeCollectionPicker}

@@ -14,6 +14,7 @@ export interface SearchPageSnapshot {
   upstreamTotalPages: number;
   upstreamTotalResults: number;
   hasSearched: boolean;
+  targetCollectionId?: string | null;
 }
 
 export const EMPTY_SEARCH_SNAPSHOT: SearchPageSnapshot = {
@@ -26,4 +27,5 @@ export const EMPTY_SEARCH_SNAPSHOT: SearchPageSnapshot = {
   upstreamTotalPages: 0,
   upstreamTotalResults: 0,
   hasSearched: false,
+  targetCollectionId: null,
 };
