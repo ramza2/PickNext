@@ -54,6 +54,21 @@ class TmdbExternalIds(BaseModel):
     twitter_id: str | None = None
 
 
+TmdbDuplicateMatchType = Literal[
+    "TITLE_YEAR",
+    "ORIGINAL_TITLE_YEAR",
+    "TITLE_NULL_YEAR",
+]
+
+
+class TmdbDuplicateCandidate(BaseModel):
+    item_id: UUID
+    title: str
+    original_title: str | None = None
+    release_year: int | None = None
+    match_type: TmdbDuplicateMatchType
+
+
 class TmdbSearchResultItem(BaseModel):
     tmdb_id: int
     media_type: TmdbMediaType
@@ -74,6 +89,7 @@ class TmdbSearchResultItem(BaseModel):
     vote_count: int | None = None
     registered: bool = False
     registered_item_id: UUID | None = None
+    duplicate_candidates: list[TmdbDuplicateCandidate] = Field(default_factory=list)
 
 
 class TmdbSearchResponse(BaseModel):

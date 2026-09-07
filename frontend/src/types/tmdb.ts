@@ -45,6 +45,14 @@ export interface TmdbExternalIds {
   twitter_id: string | null;
 }
 
+export interface TmdbDuplicateCandidate {
+  item_id: string;
+  title: string;
+  original_title: string | null;
+  release_year: number | null;
+  match_type: "TITLE_YEAR" | "ORIGINAL_TITLE_YEAR" | "TITLE_NULL_YEAR";
+}
+
 export interface TmdbSearchResultItem {
   tmdb_id: number;
   media_type: TmdbMediaType;
@@ -65,6 +73,7 @@ export interface TmdbSearchResultItem {
   vote_count: number | null;
   registered: boolean;
   registered_item_id: string | null;
+  duplicate_candidates?: TmdbDuplicateCandidate[];
 }
 
 export interface TmdbSearchResponse {

@@ -21,6 +21,8 @@ assert.match(catalog, /export function updateItem\(/);
 assert.match(catalog, /method:\s*"POST"/);
 assert.match(catalog, /method:\s*"PATCH"/);
 assert.match(catalog, /getAllCollectionsForSelect/);
+assert.match(catalog, /getCollections\(/);
+assert.match(catalog, /createCollection\(/);
 
 assert.match(messages, /buildItemUpdatePayload/);
 assert.match(messages, /collection_id/);
@@ -33,12 +35,18 @@ assert.match(app, /updateItem\(/);
 assert.match(app, /openCreateItem/);
 assert.match(app, /openEditItem/);
 assert.match(app, /lockedCollection/);
+assert.match(app, /CollectionSelectField/);
 assert.match(app, /buildItemUpdatePayload/);
 assert.match(app, /Object\.keys\(payload\)\.length === 0/);
 assert.match(app, /handleStatusToggle/);
 assert.match(app, /항목을 추가했습니다/);
 assert.match(app, /항목을 수정했습니다/);
 
+// Native collection <select> must not remain in Item write forms.
+assert.doesNotMatch(
+  app,
+  /id="item-form-collection"[\s\S]{0,120}<select/,
+);
 // Collection row "제거" = PATCH collection_id:null (not deleteItem).
 assert.match(app, /handleUnlinkConfirm/);
 assert.match(app, /컬렉션에서 항목 제거/);

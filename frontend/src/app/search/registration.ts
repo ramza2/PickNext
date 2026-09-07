@@ -21,6 +21,7 @@ export function patchSearchResultRegistered(
       ...row,
       registered: true,
       registered_item_id: registeredItemId,
+      duplicate_candidates: [],
     };
   });
   return changed ? next : rows;

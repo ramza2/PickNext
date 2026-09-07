@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { X } from "lucide-react";
-import {
-  getAllCollectionsForSelect,
-  getCategories,
-} from "../../api/catalog";
+import { getCategories } from "../../api/catalog";
 import {
   createItemFromTmdb,
   tmdbAlreadyExistsItemId,
@@ -26,8 +23,13 @@ import {
 } from "../../api/itemWriteMessages";
 import { ApiError } from "../../api/client";
 import type { ApiCategory, ApiCollection, ApiItemDetail } from "../../types/api";
-import type { TmdbDetailResponse, TmdbMediaType } from "../../types/tmdb";
+import type {
+  TmdbDetailResponse,
+  TmdbDuplicateCandidate,
+  TmdbMediaType,
+} from "../../types/tmdb";
 import { getCategoryPresentation } from "../presentation/categoryPresentation";
+import { CollectionSelectField } from "../collections/CollectionSelectField";
 
 function emptyValues(title: string): ItemFormValues {
   return {
@@ -51,6 +53,9 @@ export function TmdbRegisterForm({
   onRegistered,
   onAlreadyExists,
   showToast,
+  lockedCollection,
+  duplicateCandidates,
+  onOpenCandidateItem,
 }: {
   detail: TmdbDetailResponse;
   mediaType: TmdbMediaType;
@@ -59,12 +64,18 @@ export function TmdbRegisterForm({
   onRegistered: (item: ApiItemDetail) => void;
   onAlreadyExists: (itemId: string) => void;
   showToast: (message: string) => void;
+  lockedCollection?: { id: string; name: string } | null;
+  duplicateCandidates?: TmdbDuplicateCandidate[];
+  onOpenCandidateItem?: (itemId: string) => void;
 }) {
   const [values, setValues] = useState<ItemFormValues>(() =>
     emptyValues(detail.title),
   );
   const [categories, setCategories] = useState<ApiCategory[]>([]);
-  const [collections, setCollections] = useState<ApiCollection[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ItemFormFieldErrors>({});
@@ -76,17 +87,13 @@ export function TmdbRegisterForm({
     setOptionsLoading(true);
     setOptionsError(null);
     try {
-      const [categoriesResponse, collectionRows] = await Promise.all([
-        getCategories(),
-        getAllCollectionsForSelect(),
-      ]);
+      const categoriesResponse = await getCategories();
       setCategories(categoriesResponse.categories);
-      setCollections(collectionRows);
       if (categoriesResponse.categories.length === 0) {
         setOptionsError(ITEM_CATEGORY_EMPTY_LIST_ERROR);
       }
     } catch {
-      setOptionsError("카테고리·컬렉션을 불러오지 못했습니다.");
+      setOptionsError("카테고리를 불러오지 못했습니다.");
     } finally {
       setOptionsLoading(false);
     }
@@ -122,6 +129,10 @@ export function TmdbRegisterForm({
     setServerError(null);
     if (hasItemFormFieldErrors(errors)) return;
 
+    const collectionId = lockedCollection?.id
+      ?? selectedCollection?.id
+      ?? null;
+
     setPending(true);
     try {
       const title = values.title.trim();
@@ -129,7 +140,7 @@ export function TmdbRegisterForm({
         media_type: mediaType,
         tmdb_id: tmdbId,
         category_id: values.categoryId,
-        collection_id: values.collectionId,
+        collection_id: collectionId,
         status: values.status,
         rating: values.rating,
         progress_note: normalizeNullableText(values.progressNote),
@@ -161,6 +172,7 @@ export function TmdbRegisterForm({
   };
 
   const formError = fieldErrors.form ?? serverError ?? optionsError;
+  const candidates = duplicateCandidates ?? [];
 
   return (
     <div
@@ -197,6 +209,39 @@ export function TmdbRegisterForm({
         </div>
 
         <form onSubmit={(event) => void onSubmit(event)} className="px-5 py-4 space-y-4">
+          {candidates.length > 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+              <p className="text-xs font-medium text-amber-900">
+                기존에 등록한 항목일 수 있습니다.
+              </p>
+              <ul className="space-y-1.5">
+                {candidates.map((candidate) => (
+                  <li
+                    key={candidate.item_id}
+                    className="flex items-center justify-between gap-2 text-xs text-amber-900"
+                  >
+                    <span className="truncate">
+                      {candidate.title}
+                      {candidate.release_year != null ? ` · ${candidate.release_year}` : ""}
+                    </span>
+                    {onOpenCandidateItem ? (
+                      <button
+                        type="button"
+                        className="shrink-0 text-primary underline-offset-2 hover:underline"
+                        onClick={() => onOpenCandidateItem(candidate.item_id)}
+                      >
+                        기존 항목 보기
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-amber-800">
+                그래도 새 항목으로 등록할 수 있습니다.
+              </p>
+            </div>
+          ) : null}
+
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
               제목
@@ -306,29 +351,36 @@ export function TmdbRegisterForm({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              컬렉션 (선택)
-            </label>
-            <select
-              value={values.collectionId ?? ""}
-              disabled={pending || optionsLoading}
-              onChange={(event) =>
+          {lockedCollection ? (
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-1.5">
+                Collection
+              </div>
+              <input
+                value={lockedCollection.name}
+                readOnly
+                disabled
+                className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-muted text-foreground disabled:opacity-80"
+              />
+            </div>
+          ) : (
+            <CollectionSelectField
+              selected={selectedCollection}
+              disabled={pending}
+              showToast={showToast}
+              onChange={(collection: ApiCollection | null) => {
+                setSelectedCollection(
+                  collection
+                    ? { id: collection.id, name: collection.name }
+                    : null,
+                );
                 setValues((prev) => ({
                   ...prev,
-                  collectionId: event.target.value || null,
-                }))
-              }
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background"
-            >
-              <option value="">없음</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-            </select>
-          </div>
+                  collectionId: collection?.id ?? null,
+                }));
+              }}
+            />
+          )}
 
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">

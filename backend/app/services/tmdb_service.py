@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import date
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, literal_column, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -18,6 +20,8 @@ from app.schemas.tmdb import (
     TmdbCastMember,
     TmdbCrewMember,
     TmdbDetailResponse,
+    TmdbDuplicateCandidate,
+    TmdbDuplicateMatchType,
     TmdbExternalIds,
     TmdbGenre,
     TmdbSearchMediaFilter,
@@ -30,10 +34,36 @@ from app.services import catalog
 EXTERNAL_SOURCE_TMDB = "tmdb"
 CAST_LIMIT = 10
 MAX_QUERY_LENGTH = 200
+MAX_DUPLICATE_CANDIDATES = 5
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def trim_search_query(raw: str) -> str:
     return raw.strip()
+
+
+def normalize_title_for_match(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = unicodedata.normalize("NFKC", value).casefold().strip()
+    text = _WHITESPACE_RE.sub(" ", text)
+    return text or None
+
+
+def sql_normalized_title_expr(column: ColumnElement[Any]) -> ColumnElement[Any]:
+    """SQL mirror of normalize_title_for_match for candidate prefilter.
+
+    Uses PostgreSQL NORMALIZE(NFKC) + btrim + whitespace collapse + lower so
+    SQL does not drop rows that Python matching would accept.
+    """
+    return func.lower(
+        func.regexp_replace(
+            func.btrim(func.normalize(column, literal_column("NFKC"))),
+            r"\s+",
+            " ",
+            "g",
+        )
+    )
 
 
 def parse_tmdb_date(value: object) -> date | None:
@@ -159,6 +189,148 @@ class TmdbService:
             key = (item.external_media_type, item.external_id)
             if key in wanted:
                 mapping[key] = item.id
+        return mapping
+
+    def _match_item_to_tmdb_result(
+        self,
+        item: Item,
+        *,
+        tmdb_title_norm: str | None,
+        tmdb_original_norm: str | None,
+        tmdb_year: int | None,
+    ) -> TmdbDuplicateMatchType | None:
+        item_title_norm = normalize_title_for_match(item.title)
+        item_original_norm = normalize_title_for_match(item.original_title)
+        item_titles = {
+            value for value in (item_title_norm, item_original_norm) if value
+        }
+        if not item_titles:
+            return None
+
+        title_hit = bool(tmdb_title_norm and tmdb_title_norm in item_titles)
+        original_hit = bool(
+            tmdb_original_norm and tmdb_original_norm in item_titles
+        )
+        if not title_hit and not original_hit:
+            return None
+
+        if item.release_year is not None and tmdb_year is not None:
+            if item.release_year != tmdb_year:
+                return None
+            if title_hit:
+                return "TITLE_YEAR"
+            return "ORIGINAL_TITLE_YEAR"
+
+        if item.release_year is None:
+            if title_hit or original_hit:
+                return "TITLE_NULL_YEAR"
+        return None
+
+    def _duplicate_candidates_by_result(
+        self,
+        db: Session,
+        user: User,
+        results: list[TmdbSearchResultItem],
+    ) -> dict[tuple[str, int], list[TmdbDuplicateCandidate]]:
+        """Batch-load possible manual duplicates for unregistered TMDB rows."""
+        pending: list[TmdbSearchResultItem] = [
+            row for row in results if not row.registered
+        ]
+        if not pending:
+            return {}
+
+        # Fully normalized TMDB keys — must match sql_normalized_title_expr.
+        normalized_samples: set[str] = set()
+        years: set[int] = set()
+        for row in pending:
+            for raw in (row.title, row.original_title):
+                sample = normalize_title_for_match(raw)
+                if sample:
+                    normalized_samples.add(sample)
+            if row.release_year is not None:
+                years.add(row.release_year)
+
+        if not normalized_samples:
+            return {}
+
+        conditions = [
+            sql_normalized_title_expr(Item.title).in_(normalized_samples),
+            sql_normalized_title_expr(
+                func.coalesce(Item.original_title, "")
+            ).in_(normalized_samples),
+        ]
+        year_filter = Item.release_year.is_(None)
+        if years:
+            year_filter = or_(year_filter, Item.release_year.in_(years))
+
+        registered_ids = {
+            row.registered_item_id for row in results if row.registered_item_id
+        }
+        query = select(Item).where(
+            Item.user_id == user.id,
+            or_(*conditions),
+            year_filter,
+        )
+        if registered_ids:
+            query = query.where(Item.id.notin_(registered_ids))
+        # Deterministic order for candidate lists.
+        query = query.order_by(Item.title.asc(), Item.id.asc())
+        candidates = list(db.scalars(query).all())
+        if not candidates:
+            return {}
+
+        mapping: dict[tuple[str, int], list[TmdbDuplicateCandidate]] = {}
+        match_rank = {
+            "TITLE_YEAR": 0,
+            "ORIGINAL_TITLE_YEAR": 1,
+            "TITLE_NULL_YEAR": 2,
+        }
+        for row in pending:
+            tmdb_title_norm = normalize_title_for_match(row.title)
+            tmdb_original_norm = normalize_title_for_match(row.original_title)
+            matched: list[tuple[int, TmdbDuplicateCandidate]] = []
+            for item in candidates:
+                # Exact TMDB identity items are handled by registered flag.
+                if (
+                    item.external_source == EXTERNAL_SOURCE_TMDB
+                    and item.external_media_type == row.media_type
+                    and item.external_id == str(row.tmdb_id)
+                ):
+                    continue
+                match_type = self._match_item_to_tmdb_result(
+                    item,
+                    tmdb_title_norm=tmdb_title_norm,
+                    tmdb_original_norm=tmdb_original_norm,
+                    tmdb_year=row.release_year,
+                )
+                if match_type is None:
+                    continue
+                matched.append(
+                    (
+                        match_rank[match_type],
+                        TmdbDuplicateCandidate(
+                            item_id=item.id,
+                            title=item.title,
+                            original_title=item.original_title,
+                            release_year=item.release_year,
+                            match_type=match_type,
+                        ),
+                    )
+                )
+            if not matched:
+                continue
+            matched.sort(key=lambda pair: (pair[0], pair[1].title, str(pair[1].item_id)))
+            # Deduplicate by item_id keeping strongest match.
+            seen: set[UUID] = set()
+            limited: list[TmdbDuplicateCandidate] = []
+            for _rank, candidate in matched:
+                if candidate.item_id in seen:
+                    continue
+                seen.add(candidate.item_id)
+                limited.append(candidate)
+                if len(limited) >= MAX_DUPLICATE_CANDIDATES:
+                    break
+            mapping[(row.media_type, row.tmdb_id)] = limited
         return mapping
 
     def _normalize_search_row(
@@ -301,6 +473,15 @@ class TmdbService:
             )
             if item is not None:
                 normalized.append(item)
+
+        candidate_map = self._duplicate_candidates_by_result(db, user, normalized)
+        if candidate_map:
+            for idx, row in enumerate(normalized):
+                candidates = candidate_map.get((row.media_type, row.tmdb_id))
+                if candidates:
+                    normalized[idx] = row.model_copy(
+                        update={"duplicate_candidates": candidates}
+                    )
 
         total_pages = upstream.get("total_pages")
         total_results = upstream.get("total_results")

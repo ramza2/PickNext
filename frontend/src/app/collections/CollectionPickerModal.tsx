@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Check, ChevronLeft, Plus, Search, X } from "lucide-react";
+import { Check, ChevronLeft, Plus, X } from "lucide-react";
 import {
   createCollection,
   getCollections,
@@ -15,6 +15,7 @@ import {
   validateCollectionName,
 } from "../../api/collectionWriteMessages";
 import type { ApiCollection, ApiItemDetail } from "../../types/api";
+import { ClearableSearchInput } from "../components/ClearableSearchInput";
 
 type PickerView = "picker" | "create";
 
@@ -30,20 +31,46 @@ function isAbortError(err: unknown): boolean {
   return false;
 }
 
-export function CollectionPickerModal({
-  open,
-  item,
-  onClose,
-  onAssigned,
-  showToast,
-}: {
+type SharedProps = {
   open: boolean;
-  item: ApiItemDetail;
   onClose: () => void;
-  onAssigned: (item: ApiItemDetail) => void;
   showToast: (message: string) => void;
-}) {
-  const hasCollection = Boolean(item.collection);
+  /** Override dialog title. */
+  title?: string;
+};
+
+export type CollectionPickerImmediateProps = SharedProps & {
+  mode: "immediate";
+  item: ApiItemDetail;
+  onAssigned: (item: ApiItemDetail) => void;
+};
+
+export type CollectionPickerSelectProps = SharedProps & {
+  mode: "select";
+  currentCollection?: { id: string; name: string } | null;
+  allowClear?: boolean;
+  onSelect: (collection: ApiCollection | null) => void;
+};
+
+export type CollectionPickerModalProps =
+  | CollectionPickerImmediateProps
+  | CollectionPickerSelectProps;
+
+export function CollectionPickerModal(props: CollectionPickerModalProps) {
+  const { open, onClose, showToast, title } = props;
+  const isImmediate = props.mode === "immediate";
+  const item = isImmediate ? props.item : null;
+  const currentCollectionId = isImmediate
+    ? (item?.collection?.id ?? null)
+    : (props.currentCollection?.id ?? null);
+  const currentCollectionName = isImmediate
+    ? (item?.collection?.name ?? null)
+    : (props.currentCollection?.name ?? null);
+  const allowClear = isImmediate
+    ? Boolean(currentCollectionId)
+    : Boolean(props.allowClear);
+
+  const hasCollection = Boolean(currentCollectionId);
   const titleId = "collection-picker-title";
   const searchRef = useRef<HTMLInputElement>(null);
   const createNameRef = useRef<HTMLInputElement>(null);
@@ -54,22 +81,20 @@ export function CollectionPickerModal({
   const [collections, setCollections] = useState<ApiCollection[]>([]);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    item.collection?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(currentCollectionId);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [createName, setCreateName] = useState("");
   const [createValidationError, setCreateValidationError] = useState<string | null>(null);
   const [createServerError, setCreateServerError] = useState<string | null>(null);
-  const [createdCollectionId, setCreatedCollectionId] = useState<string | null>(null);
+  const [createdCollection, setCreatedCollection] = useState<ApiCollection | null>(null);
 
-  const currentCollectionId = item.collection?.id ?? null;
   const isSameSelection =
     selectedId != null && selectedId === currentCollectionId;
-  const canSubmit =
-    selectedId != null && !isSameSelection && !pending;
+  const canSubmit = isImmediate
+    ? selectedId != null && !isSameSelection && !pending
+    : selectedId != null && !pending;
 
   useEffect(() => {
     if (!open) return;
@@ -78,14 +103,14 @@ export function CollectionPickerModal({
     setAppliedSearch("");
     setCollections([]);
     setListError(null);
-    setSelectedId(item.collection?.id ?? null);
+    setSelectedId(currentCollectionId);
     setPending(false);
     setActionError(null);
     setCreateName("");
     setCreateValidationError(null);
     setCreateServerError(null);
-    setCreatedCollectionId(null);
-  }, [open, item.id, item.collection?.id]);
+    setCreatedCollection(null);
+  }, [open, currentCollectionId, item?.id]);
 
   useEffect(() => {
     if (!open || view !== "picker") return undefined;
@@ -146,14 +171,20 @@ export function CollectionPickerModal({
     return () => controller.abort();
   }, [open, view, appliedSearch]);
 
+  const finishSelect = useCallback((collection: ApiCollection | null) => {
+    if (props.mode !== "select") return;
+    props.onSelect(collection);
+    onClose();
+  }, [onClose, props]);
+
   const assignToCollection = useCallback(async (collectionId: string) => {
-    if (pending) return;
+    if (props.mode !== "immediate" || !item || pending) return;
     if (collectionId === currentCollectionId) return;
     setPending(true);
     setActionError(null);
     try {
       const updated = await updateItem(item.id, { collection_id: collectionId });
-      onAssigned(updated);
+      props.onAssigned(updated);
       showToast(
         hasCollection
           ? "Collection을 변경했습니다."
@@ -175,42 +206,57 @@ export function CollectionPickerModal({
     } finally {
       setPending(false);
     }
-  }, [
-    currentCollectionId,
-    hasCollection,
-    item.id,
-    onAssigned,
-    onClose,
-    pending,
-    showToast,
-  ]);
+  }, [currentCollectionId, hasCollection, item, onClose, pending, props, showToast]);
 
-  const handleRemove = async () => {
-    if (pending || !currentCollectionId) return;
-    setPending(true);
-    setActionError(null);
-    try {
-      const updated = await updateItem(item.id, { collection_id: null });
-      onAssigned(updated);
-      showToast("Collection에서 제거했습니다.");
-      onClose();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        setActionError("항목을 찾을 수 없습니다.");
-      } else {
-        setActionError("Collection에서 제거하지 못했습니다.");
-      }
-    } finally {
-      setPending(false);
+  const handleConfirm = async () => {
+    if (!selectedId || pending) return;
+    if (isImmediate) {
+      await assignToCollection(selectedId);
+      return;
     }
+    const selected = collections.find((row) => row.id === selectedId)
+      ?? (createdCollection?.id === selectedId ? createdCollection : null);
+    if (!selected) {
+      setActionError("선택한 Collection을 찾을 수 없습니다.");
+      return;
+    }
+    finishSelect(selected);
   };
 
-  const handleCreateAndAssign = async (event?: FormEvent) => {
+  const handleClear = async () => {
+    if (pending || !allowClear) return;
+    if (isImmediate && item) {
+      setPending(true);
+      setActionError(null);
+      try {
+        const updated = await updateItem(item.id, { collection_id: null });
+        props.onAssigned(updated);
+        showToast("Collection에서 제거했습니다.");
+        onClose();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          setActionError("항목을 찾을 수 없습니다.");
+        } else {
+          setActionError("Collection에서 제거하지 못했습니다.");
+        }
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
+    finishSelect(null);
+  };
+
+  const handleCreate = async (event?: FormEvent) => {
     event?.preventDefault();
     if (pending) return;
 
-    if (createdCollectionId) {
-      await assignToCollection(createdCollectionId);
+    if (createdCollection) {
+      if (isImmediate) {
+        await assignToCollection(createdCollection.id);
+      } else {
+        finishSelect(createdCollection);
+      }
       return;
     }
 
@@ -228,24 +274,30 @@ export function CollectionPickerModal({
     setActionError(null);
     try {
       const created = await createCollection({ name: normalized });
-      setCreatedCollectionId(created.id);
+      setCreatedCollection(created);
       setSelectedId(created.id);
-      try {
-        const updated = await updateItem(item.id, {
-          collection_id: created.id,
-        });
-        onAssigned(updated);
-        showToast("Collection을 만들고 항목을 추가했습니다.");
-        onClose();
-      } catch {
-        setView("picker");
-        setActionError(
-          "Collection은 생성되었지만 항목 추가에 실패했습니다. 다시 시도해 주세요.",
-        );
-        setCollections((prev) => {
-          if (prev.some((row) => row.id === created.id)) return prev;
-          return [created, ...prev];
-        });
+      setCollections((prev) => {
+        if (prev.some((row) => row.id === created.id)) return prev;
+        return [created, ...prev];
+      });
+
+      if (isImmediate && item) {
+        try {
+          const updated = await updateItem(item.id, {
+            collection_id: created.id,
+          });
+          props.onAssigned(updated);
+          showToast("Collection을 만들고 항목을 추가했습니다.");
+          onClose();
+        } catch {
+          setView("picker");
+          setActionError(
+            "Collection은 생성되었지만 항목 추가에 실패했습니다. 다시 시도해 주세요.",
+          );
+        }
+      } else {
+        showToast("Collection을 만들었습니다.");
+        finishSelect(created);
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -262,18 +314,24 @@ export function CollectionPickerModal({
 
   if (!open) return null;
 
-  const modalTitle = hasCollection ? "Collection 변경" : "Collection에 추가";
-  const primaryLabel = hasCollection
-    ? pending ? "변경 중..." : "변경"
-    : pending ? "추가 중..." : "추가";
+  const modalTitle = title
+    ?? (isImmediate
+      ? (hasCollection ? "Collection 변경" : "Collection에 추가")
+      : "Collection 선택");
+  const primaryLabel = isImmediate
+    ? (hasCollection
+      ? (pending ? "변경 중..." : "변경")
+      : (pending ? "추가 중..." : "추가"))
+    : (pending ? "선택 중..." : "선택");
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pb-16 sm:pb-4"
+      className="fixed inset-0 bg-black/50 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 pb-16 sm:pb-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      onClick={() => {
+      onClick={(event) => {
+        event.stopPropagation();
         if (!pending) onClose();
       }}
     >
@@ -320,24 +378,18 @@ export function CollectionPickerModal({
               <label className="sr-only" htmlFor="collection-picker-search">
                 Collection 이름 검색
               </label>
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  ref={searchRef}
-                  id="collection-picker-search"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Collection 이름 검색"
-                  disabled={pending}
-                  className="w-full pl-9 pr-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
-                />
-              </div>
+              <ClearableSearchInput
+                id="collection-picker-search"
+                inputRef={searchRef}
+                value={searchInput}
+                onChange={setSearchInput}
+                placeholder="Collection 이름 검색"
+                disabled={pending}
+                className="bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+              />
               {currentCollectionId && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  현재: {item.collection?.name ?? "미지정"}
+                  현재: {currentCollectionName ?? "미지정"}
                 </p>
               )}
             </div>
@@ -411,14 +463,14 @@ export function CollectionPickerModal({
                 <Plus size={14} /> 새 Collection 만들기
               </button>
 
-              {currentCollectionId && (
+              {allowClear && currentCollectionId && (
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => void handleRemove()}
+                  onClick={() => void handleClear()}
                   className="w-full text-sm text-muted-foreground py-2 hover:text-foreground transition-colors disabled:opacity-50"
                 >
-                  Collection에서 제거
+                  {isImmediate ? "Collection에서 제거" : "Collection 없음"}
                 </button>
               )}
 
@@ -440,9 +492,7 @@ export function CollectionPickerModal({
                 <button
                   type="button"
                   disabled={!canSubmit}
-                  onClick={() => {
-                    if (selectedId) void assignToCollection(selectedId);
-                  }}
+                  onClick={() => void handleConfirm()}
                   className="flex-1 bg-primary hover:bg-blue-700 text-white py-2.5 rounded-xl font-medium transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {primaryLabel}
@@ -453,7 +503,7 @@ export function CollectionPickerModal({
         ) : (
           <form
             className="px-5 py-4 flex flex-col gap-4"
-            onSubmit={(event) => void handleCreateAndAssign(event)}
+            onSubmit={(event) => void handleCreate(event)}
           >
             <div>
               <label
@@ -471,7 +521,7 @@ export function CollectionPickerModal({
                   setCreateValidationError(null);
                   setCreateServerError(null);
                 }}
-                disabled={pending || Boolean(createdCollectionId)}
+                disabled={pending || Boolean(createdCollection)}
                 placeholder="새 Collection 이름"
                 className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
                 aria-invalid={
@@ -483,7 +533,7 @@ export function CollectionPickerModal({
                   {createValidationError ?? createServerError}
                 </p>
               )}
-              {createdCollectionId && (
+              {createdCollection && isImmediate && (
                 <p className="text-xs text-muted-foreground mt-1.5">
                   Collection은 생성되었습니다. 항목 추가를 다시 시도하세요.
                 </p>
@@ -513,8 +563,12 @@ export function CollectionPickerModal({
                 className="flex-1 bg-primary hover:bg-blue-700 text-white py-2.5 rounded-xl font-medium transition-colors text-sm disabled:opacity-50"
               >
                 {pending
-                  ? (createdCollectionId ? "추가 중..." : "생성 중...")
-                  : (createdCollectionId ? "다시 추가" : "생성 후 추가")}
+                  ? (createdCollection
+                    ? (isImmediate ? "추가 중..." : "선택 중...")
+                    : "생성 중...")
+                  : (createdCollection
+                    ? (isImmediate ? "다시 추가" : "선택")
+                    : (isImmediate ? "생성 후 추가" : "생성 후 선택"))}
               </button>
             </div>
           </form>

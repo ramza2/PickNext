@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { ApiError } from "../../api/client";
-import { getItem } from "../../api/catalog";
+import { getCollection, getItem } from "../../api/catalog";
 import { getTmdbStatus, searchTmdb } from "../../api/tmdb";
 import {
   tmdbErrorMessage,
@@ -18,6 +18,7 @@ import type {
   TmdbSearchResultItem,
   TmdbStatusResponse,
 } from "../../types/tmdb";
+import { ClearableSearchInput } from "../components/ClearableSearchInput";
 import { TmdbDetailPanel } from "./TmdbDetailPanel";
 import { TmdbRegisterForm } from "./TmdbRegisterForm";
 import {
@@ -37,6 +38,10 @@ const MEDIA_FILTERS: { value: TmdbSearchMediaFilter; label: string }[] = [
 
 const STALE_REGISTERED_ITEM_TOAST =
   "등록된 항목을 찾을 수 없어 검색 상태를 갱신했습니다.";
+const STALE_CANDIDATE_ITEM_TOAST =
+  "기존 항목을 찾을 수 없어 후보 목록을 갱신했습니다.";
+const TARGET_COLLECTION_NOT_FOUND_TOAST =
+  "Collection을 찾을 수 없습니다.";
 const SEARCH_REVALIDATE_FAIL_TOAST =
   "검색 결과의 등록 상태를 새로고치지 못했습니다. 표시 중인 결과는 이전 상태일 수 있습니다.";
 
@@ -73,11 +78,13 @@ export function SearchPage({
   openItemDetail,
   initialSnapshot,
   onSnapshotChange,
+  targetCollectionId,
 }: {
   showToast: (message: string) => void;
   openItemDetail: (itemId: string) => void;
   initialSnapshot?: SearchPageSnapshot | null;
   onSnapshotChange?: (snapshot: SearchPageSnapshot) => void;
+  targetCollectionId?: string | null;
 }) {
   const [queryInput, setQueryInput] = useState(
     () => initialSnapshot?.queryInput ?? "",
@@ -109,6 +116,10 @@ export function SearchPage({
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [revalidating, setRevalidating] = useState(false);
+  const [targetCollection, setTargetCollection] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const [detailSelection, setDetailSelection] =
     useState<TmdbSearchResultItem | null>(null);
@@ -119,7 +130,13 @@ export function SearchPage({
   onSnapshotChangeRef.current = onSnapshotChange;
   const searchRequestIdRef = useRef(0);
   const statusRequestIdRef = useRef(0);
+  const collectionRequestIdRef = useRef(0);
   const didRevalidateRef = useRef(false);
+
+  const resolvedTargetCollectionId =
+    targetCollectionId !== undefined
+      ? targetCollectionId
+      : (initialSnapshot?.targetCollectionId ?? null);
 
   const publishSnapshot = useCallback(
     (patch: Partial<SearchPageSnapshot>) => {
@@ -133,6 +150,7 @@ export function SearchPage({
         upstreamTotalPages,
         upstreamTotalResults,
         hasSearched,
+        targetCollectionId: resolvedTargetCollectionId,
         ...patch,
       };
       onSnapshotChangeRef.current?.(next);
@@ -147,6 +165,7 @@ export function SearchPage({
       upstreamTotalPages,
       upstreamTotalResults,
       hasSearched,
+      resolvedTargetCollectionId,
     ],
   );
 
@@ -175,6 +194,35 @@ export function SearchPage({
       void loadStatus();
     }
   }, [initialSnapshot?.status, loadStatus]);
+
+  useEffect(() => {
+    if (!resolvedTargetCollectionId) {
+      setTargetCollection(null);
+      return;
+    }
+    const requestId = ++collectionRequestIdRef.current;
+    const collectionId = resolvedTargetCollectionId;
+    void (async () => {
+      try {
+        const collection = await getCollection(collectionId);
+        if (requestId !== collectionRequestIdRef.current) return;
+        setTargetCollection({ id: collection.id, name: collection.name });
+      } catch (err) {
+        if (requestId !== collectionRequestIdRef.current) return;
+        setTargetCollection(null);
+        if (err instanceof ApiError && err.status === 404) {
+          showToast(TARGET_COLLECTION_NOT_FOUND_TOAST);
+          return;
+        }
+        showToast(
+          tmdbErrorMessage(
+            err,
+            "Collection 정보를 불러오지 못했습니다.",
+          ),
+        );
+      }
+    })();
+  }, [resolvedTargetCollectionId, showToast]);
 
   const runSearch = useCallback(
     async (
@@ -294,6 +342,7 @@ export function SearchPage({
           ...prev,
           registered: true,
           registered_item_id: itemId,
+          duplicate_candidates: [],
         };
       });
     },
@@ -353,6 +402,78 @@ export function SearchPage({
     [markUnregistered, openItemDetail, showToast],
   );
 
+  const removeStaleCandidate = useCallback(
+    (media: TmdbMediaType, tmdbId: number, itemId: string) => {
+      setResults((prev) => {
+        let changed = false;
+        const next = prev.map((row) => {
+          if (row.media_type !== media || row.tmdb_id !== tmdbId) {
+            return row;
+          }
+          const candidates = row.duplicate_candidates;
+          if (!candidates?.some((candidate) => candidate.item_id === itemId)) {
+            return row;
+          }
+          changed = true;
+          return {
+            ...row,
+            duplicate_candidates: candidates.filter(
+              (candidate) => candidate.item_id !== itemId,
+            ),
+          };
+        });
+        if (!changed) return prev;
+        publishSnapshot({ results: next });
+        return next;
+      });
+      setDetailSelection((prev) => {
+        if (
+          !prev
+          || prev.media_type !== media
+          || prev.tmdb_id !== tmdbId
+        ) {
+          return prev;
+        }
+        const candidates = prev.duplicate_candidates;
+        if (!candidates?.some((candidate) => candidate.item_id === itemId)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          duplicate_candidates: candidates.filter(
+            (candidate) => candidate.item_id !== itemId,
+          ),
+        };
+      });
+    },
+    [publishSnapshot],
+  );
+
+  const openCandidateItem = useCallback(
+    async (row: {
+      media_type: TmdbMediaType;
+      tmdb_id: number;
+      item_id: string;
+    }) => {
+      const itemId = row.item_id;
+      if (!itemId) return;
+      try {
+        await getItem(itemId);
+        openItemDetail(itemId);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          removeStaleCandidate(row.media_type, row.tmdb_id, itemId);
+          showToast(STALE_CANDIDATE_ITEM_TOAST);
+          return;
+        }
+        showToast(
+          tmdbErrorMessage(err, "항목을 열지 못했습니다. 잠시 후 다시 시도해 주세요."),
+        );
+      }
+    },
+    [openItemDetail, removeStaleCandidate, showToast],
+  );
+
   const handleRegistered = (item: ApiItemDetail) => {
     if (registerDetail) {
       markRegistered(
@@ -385,6 +506,15 @@ export function SearchPage({
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
       <h1 className="text-xl font-bold text-foreground mb-5">영화·드라마 검색</h1>
+
+      {targetCollection ? (
+        <div className="mb-4 rounded-xl border border-primary/20 bg-blue-50 px-4 py-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold text-primary">
+            Collection에 추가
+          </span>
+          <span className="text-sm text-foreground">{targetCollection.name}</span>
+        </div>
+      ) : null}
 
       {statusLoading ? (
         <div className="bg-card border border-border rounded-2xl p-6 text-center text-sm text-muted-foreground mb-4">
@@ -430,20 +560,15 @@ export function SearchPage({
 
       <form onSubmit={onSubmitSearch} className="space-y-3 mb-5">
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
+          <div className="flex-1 min-w-0">
+            <ClearableSearchInput
               value={queryInput}
-              onChange={(event) => {
-                const next = event.target.value;
+              onChange={(next) => {
                 setQueryInput(next);
                 publishSnapshot({ queryInput: next });
               }}
               placeholder="영화·드라마 제목 검색"
-              className="w-full border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm bg-card"
+              className="bg-card"
               disabled={status?.status === "NOT_CONFIGURED"}
             />
           </div>
@@ -547,6 +672,13 @@ export function SearchPage({
                       등록됨
                     </span>
                   ) : null}
+                  {!row.registered
+                    && row.duplicate_candidates
+                    && row.duplicate_candidates.length > 0 ? (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800">
+                      기존 항목 후보 {row.duplicate_candidates.length}
+                    </span>
+                  ) : null}
                 </div>
                 <h2 className="text-sm font-semibold text-foreground truncate">
                   {row.title}
@@ -556,6 +688,38 @@ export function SearchPage({
                     .filter(Boolean)
                     .join(" · ") || "—"}
                 </p>
+                {!row.registered
+                  && row.duplicate_candidates
+                  && row.duplicate_candidates.length > 0 ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {row.duplicate_candidates.map((candidate) => (
+                      <li
+                        key={candidate.item_id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900"
+                      >
+                        <span className="truncate min-w-0">
+                          {candidate.title}
+                          {candidate.release_year != null
+                            ? ` · ${candidate.release_year}`
+                            : ""}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void openCandidateItem({
+                              media_type: row.media_type,
+                              tmdb_id: row.tmdb_id,
+                              item_id: candidate.item_id,
+                            })
+                          }
+                          className="shrink-0 text-xs border border-amber-200 text-amber-900 px-2.5 py-1 rounded-lg hover:bg-amber-50"
+                        >
+                          기존 항목 보기
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button
                     type="button"
@@ -655,6 +819,15 @@ export function SearchPage({
           onRegistered={handleRegistered}
           onAlreadyExists={handleAlreadyExists}
           showToast={showToast}
+          lockedCollection={targetCollection}
+          duplicateCandidates={detailSelection?.duplicate_candidates}
+          onOpenCandidateItem={(itemId) => {
+            void openCandidateItem({
+              media_type: registerDetail.media_type,
+              tmdb_id: registerDetail.tmdb_id,
+              item_id: itemId,
+            });
+          }}
         />
       ) : null}
     </div>

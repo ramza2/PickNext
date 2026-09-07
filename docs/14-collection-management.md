@@ -36,7 +36,7 @@
 - Collection 있음 → 버튼 **Collection 변경**
 - 전용 Modal (`CollectionPickerModal`): 검색 List · 선택 · 새 Collection 생성 후 자동 편입 · 제거
 - 전체 Item 수정 Modal을 Collection 이동 용도로 열지 않음
-- Item Edit Form의 Collection `<select>`는 유지 (COL-1 비핵심)
+- **ITEM-UX-2:** Item 직접 추가·수정·TMDB 일반 등록 Form도 동일 검색형 Picker (`mode="select"`)로 통일. Item 상세는 기존 Immediate PATCH (`mode="immediate"`) 유지.
 
 ### Collection 상세
 

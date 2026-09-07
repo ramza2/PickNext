@@ -421,6 +421,7 @@ Database backup/restore 설계·운영 주의사항은 `docs/15-database-backup-
 - Frontend Home·Items·Collections·Item Detail·TMDB Search 실연동
 - **REC-1:** 랜덤 추천 · 이걸로 선택 · 추천 이력 목록/상세/삭제 · Home 최근 선택
 - **OPS-1:** Settings 데이터 관리 · PostgreSQL 16 ZIP 백업/복원 (환경변수 관리자 Gate)
+- **ITEM-UX-2:** TMDB 수동등록 후보 안내 · 검색 Clear(X) · Collection scoped TMDB 등록 · Form Collection Picker 통일
 
 ## 이번 범위에서 제외
 

@@ -13,7 +13,7 @@ export type AppRoute =
   | { name: "item-detail"; itemId: string }
   | { name: "collections"; collectionId?: string }
   | { name: "categories" }
-  | { name: "search" }
+  | { name: "search"; collectionId?: string }
   | { name: "recommend" }
   | { name: "recommendation-history"; page?: number }
   | { name: "recommendation-history-detail"; historyId: string }
@@ -94,8 +94,12 @@ export function buildPath(route: AppRoute): string {
         : "/collections";
     case "categories":
       return "/categories";
-    case "search":
+    case "search": {
+      if (route.collectionId) {
+        return `/search?collection_id=${encodeURIComponent(route.collectionId)}`;
+      }
       return "/search";
+    }
     case "recommend":
       return "/recommend";
     case "recommendation-history": {
@@ -152,7 +156,13 @@ export function parseLocation(pathname: string, search = ""): AppRoute {
   if (path === "/items") return { name: "items", query: parseItemsQuery(query) };
   if (path === "/collections") return { name: "collections" };
   if (path === "/categories") return { name: "categories" };
-  if (path === "/search") return { name: "search" };
+  if (path === "/search") {
+    const params = new URLSearchParams(query);
+    const collectionIdRaw = params.get("collection_id")?.trim() || undefined;
+    const collectionId =
+      collectionIdRaw && isUuid(collectionIdRaw) ? collectionIdRaw : undefined;
+    return { name: "search", collectionId };
+  }
   if (path === "/recommend") return { name: "recommend" };
   if (path === "/recommendation-history") {
     const params = new URLSearchParams(query);

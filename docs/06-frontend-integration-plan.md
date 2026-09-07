@@ -1,11 +1,12 @@
 # 06. Frontend Integration Plan (Figma Make 기준선)
 
-> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1/RC-2 PASS** · **SET-CLEAN-1** · **TMDB-2/TMDB-3** · **AUTH-1** · **REC-1** · **NAV-1/NAV-1A** · **COL-1** · **UI-PAGE-1** · **NAV-2 (2026-08-26): Sidebar 메뉴에서 전체 항목을 콘텐츠 검색보다 앞**
+> **상태:** Frontend D-7·C-1/C-2·I-1/I-2/I-3 쓰기 완료 · **RC-1/RC-2 PASS** · **SET-CLEAN-1** · **TMDB-2/TMDB-3** · **AUTH-1** · **REC-1** · **NAV-1/NAV-1A** · **COL-1** · **UI-PAGE-1** · **NAV-2** · **ITEM-UX-2 (항목 등록·검색·Collection 선택 UX)**
 > **기준선:** `frontend/` Figma Make 프로토타입 (디자인·DOM·Tailwind 유지)
 > **비범위 (잔여):** Bulk Delete, Drag & Drop, Category 쓰기, Export/Import, React Router 전면 전환, 자동화 Browser E2E
 > **NAV-1 요약:** `window.history` Navigation Layer (`frontend/src/navigation/`). Canonical URL·Back/Forward·PWA Back·Auth `next`·Route Cache. 상세: `docs/13-browser-history-navigation.md`.
 > **NAV-1A 요약:** Item 상세 `항목 수정` 팝업을 URL 비변경 Overlay Entry로 연결. Browser/PWA Back은 팝업만 닫고 상세 Route/URL 유지.
 > **COL-1 요약:** Item 상세 Collection 전용 Picker · Collection 상세 기존 항목 추가 Modal · Bulk `POST /collections/{id}/items`. 상세: `docs/14-collection-management.md`.
+> **ITEM-UX-2 요약:** TMDB 검색 `duplicate_candidates`(수동 등록 후보 안내) · 검색/필터 `ClearableSearchInput` · Collection 상세→`/search?collection_id=` 자동 Collection 지정 · 직접 추가/TMDB 등록/Item 수정 Form에 검색형 Collection Picker 통일(Item 상세 Immediate PATCH 유지).
 > **NAV-2 요약:** `AppLayout` `NAV` 배열에서 `전체 항목`을 `콘텐츠 검색`보다 앞에 배치. Route·Label·Icon 변경 없음.
 >
 > **SET-CLEAN-1 요약:** Recommend/History/Data Nav 숨김 · Settings는 Category 보기만 · Category는 GET 읽기 전용 · `mocks/data.tsx`는 런타임 미사용.

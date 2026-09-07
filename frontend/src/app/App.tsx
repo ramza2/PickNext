@@ -7,6 +7,7 @@ import {
   Palette,
 } from "lucide-react";
 import { CollectionPickerModal } from "./collections/CollectionPickerModal";
+import { CollectionSelectField } from "./collections/CollectionSelectField";
 import { AddExistingItemsModal } from "./collections/AddExistingItemsModal";
 import type { Page } from "./pageTypes";
 import AppLayout from "./layout/AppLayout";
@@ -56,7 +57,8 @@ import {
 import { formatDate } from "../utils/date";
 import { ContentPoster, formatReleaseYearMeta } from "./components/ContentPoster";
 import { ListPaginationBar } from "./components/ListPaginationBar";
-import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories, getAllCollectionsForSelect } from "../api/catalog";
+import { ClearableSearchInput } from "./components/ClearableSearchInput";
+import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories } from "../api/catalog";
 import {
   collectionCreateFailureToast,
   collectionPatchNotFoundToast,
@@ -424,7 +426,24 @@ function ItemFormModal({
     });
   });
   const [categories, setCategories] = useState<ApiCategory[]>([]);
-  const [collections, setCollections] = useState<ApiCollection[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<{
+    id: string;
+    name: string;
+  } | null>(() => {
+    if (session.mode === "edit" && session.item.collection) {
+      return {
+        id: session.item.collection.id,
+        name: session.item.collection.name,
+      };
+    }
+    if (session.mode === "create" && session.lockedCollection) {
+      return {
+        id: session.lockedCollection.id,
+        name: session.lockedCollection.name,
+      };
+    }
+    return null;
+  });
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ItemFormFieldErrors>({});
@@ -455,43 +474,18 @@ function ItemFormModal({
     setOptionsLoading(true);
     setOptionsError(null);
     try {
-      const [categoriesResponse, collectionRows] = await Promise.all([
-        getCategories(),
-        getAllCollectionsForSelect(),
-      ]);
-      let nextCollections = collectionRows;
-      if (
-        session.mode === "edit"
-        && session.item.collection
-        && !collectionRows.some((row) => row.id === session.item.collection?.id)
-      ) {
-        nextCollections = [
-          {
-            id: session.item.collection.id,
-            name: session.item.collection.name,
-            item_count: 0,
-            planned_count: 0,
-            completed_count: 0,
-            categories: [],
-            created_at: session.item.created_at,
-            updated_at: session.item.updated_at,
-          },
-          ...collectionRows,
-        ];
-      }
+      const categoriesResponse = await getCategories();
       setCategories(categoriesResponse.categories);
-      setCollections(nextCollections);
       return {
         categories: categoriesResponse.categories,
-        collections: nextCollections,
       };
     } catch {
-      setOptionsError("카테고리 또는 컬렉션 목록을 불러오지 못했습니다.");
+      setOptionsError("카테고리 목록을 불러오지 못했습니다.");
       return null;
     } finally {
       setOptionsLoading(false);
     }
-  }, [session]);
+  }, []);
 
   useEffect(() => {
     void reloadOptions();
@@ -602,12 +596,6 @@ function ItemFormModal({
               ) {
                 updateField("categoryId", "");
               }
-              if (
-                values.collectionId
-                && !loaded.collections.some((row) => row.id === values.collectionId)
-              ) {
-                updateField("collectionId", null);
-              }
             }
           } catch (confirmErr) {
             if (confirmErr instanceof ApiError && confirmErr.status === 404) {
@@ -672,13 +660,6 @@ function ItemFormModal({
           ) {
             updateField("categoryId", "");
           }
-          if (
-            loaded
-            && values.collectionId
-            && !loaded.collections.some((row) => row.id === values.collectionId)
-          ) {
-            updateField("collectionId", null);
-          }
         }
       } else if (err instanceof ApiError && err.status === 409) {
         setServerError(ITEM_RELATED_CHANGED_ERROR);
@@ -700,7 +681,6 @@ function ItemFormModal({
     if (!formBusy) onClose();
   };
 
-  const collectionOptions = collections;
   const submitDisabled =
     formBusy
     || optionsLoading
@@ -861,11 +841,11 @@ function ItemFormModal({
             </select>
           </div>
 
-          <div>
-            <label htmlFor="item-form-collection" className="block text-sm font-medium text-foreground mb-1.5">
-              Collection <span className="text-muted-foreground font-normal text-xs">(선택)</span>
-            </label>
-            {lockedCollection ? (
+          {lockedCollection ? (
+            <div>
+              <label htmlFor="item-form-collection" className="block text-sm font-medium text-foreground mb-1.5">
+                Collection <span className="text-muted-foreground font-normal text-xs">(선택)</span>
+              </label>
               <input
                 id="item-form-collection"
                 value={lockedCollection.name}
@@ -873,25 +853,22 @@ function ItemFormModal({
                 disabled
                 className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-muted text-foreground disabled:opacity-80"
               />
-            ) : (
-              <select
-                id="item-form-collection"
-                value={values.collectionId ?? ""}
-                disabled={formBusy || optionsLoading}
-                onChange={(event) =>
-                  updateField("collectionId", event.target.value || null)
-                }
-                className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
-              >
-                <option value="">컬렉션 없음</option>
-                {collectionOptions.map((collection) => (
-                  <option key={collection.id} value={collection.id}>
-                    {collection.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+            </div>
+          ) : (
+            <CollectionSelectField
+              selected={selectedCollection}
+              disabled={formBusy}
+              showToast={showToast}
+              onChange={(collection) => {
+                setSelectedCollection(
+                  collection
+                    ? { id: collection.id, name: collection.name }
+                    : null,
+                );
+                updateField("collectionId", collection?.id ?? null);
+              }}
+            />
+          )}
 
           <div>
             <label htmlFor="item-form-release-year" className="block text-sm font-medium text-foreground mb-1.5">
@@ -2002,13 +1979,15 @@ function ItemsPage({
       {/* Toolbar */}
       <div className="bg-card border border-border rounded-2xl p-4 mb-4 space-y-3">
         <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
-            <input value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
+          <div className="flex-1">
+            <ClearableSearchInput
+              value={searchInput}
+              onChange={setSearchInput}
               onKeyDown={e => { if (e.key === "Enter") applySearchNow(); }}
               placeholder="제목 검색"
-              className="w-full pl-8 pr-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"/>
+              aria-label="제목 검색"
+              className="py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/25"
+            />
           </div>
           <div className="hidden sm:flex gap-1">
             <button onClick={() => setViewMode("card")}
@@ -2298,7 +2277,7 @@ function CollectionsPage({
     lockedCollection: { id: string; name: string };
     collectionItemsPage?: number;
   }) => void;
-  onNavigateToSearch: () => void;
+  onNavigateToSearch: (collectionId: string) => void;
   onAddExistingItems?: (collectionId: string) => void;
   collectionDetailRefreshNonce?: number;
   itemWriteBusy?: boolean;
@@ -2436,17 +2415,16 @@ function CollectionsPage({
           <Plus size={14}/> 추가
         </button>
       </div>
-      <div className="relative mb-4">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
-        <input
+      <div className="mb-4">
+        <ClearableSearchInput
           value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
+          onChange={setSearchInput}
           onKeyDown={(e) => {
             if (e.key === "Enter") applySearchNow();
           }}
           placeholder="Collection 이름 검색"
           aria-label="Collection 이름 검색"
-          className="w-full pl-8 pr-4 py-2 border border-border rounded-xl text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/25"
+          className="py-2 bg-card focus:outline-none focus:ring-2 focus:ring-primary/25"
         />
       </div>
 
@@ -2593,7 +2571,7 @@ function CollectionDetailInline({
     lockedCollection: { id: string; name: string };
     collectionItemsPage?: number;
   }) => void;
-  onNavigateToSearch: () => void;
+  onNavigateToSearch: (collectionId: string) => void;
   onAddExistingItems?: () => void;
   itemWriteBusy?: boolean;
   showToast: (m: string) => void;
@@ -2996,7 +2974,7 @@ function CollectionDetailInline({
           </button>
           <button
             type="button"
-            onClick={onNavigateToSearch}
+            onClick={() => onNavigateToSearch(collectionId)}
             className="text-xs text-primary border border-primary/25 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1"
           >
             <Search size={12}/> TMDB 검색 후 추가
@@ -3971,15 +3949,26 @@ export default function App() {
             openHistoryDetail={openHistoryDetail}
           />
         );
-      case "search":
+      case "search": {
+        const routeCollectionId = route.collectionId ?? null;
+        const snapshotMatchesContext =
+          (searchSnapshot?.targetCollectionId ?? null) === routeCollectionId;
         return (
           <SearchPage
+            key={`search-${routeCollectionId ?? "general"}`}
             showToast={showToast}
             openItemDetail={(id) => openItemDetail(id, "search")}
-            initialSnapshot={searchSnapshot}
-            onSnapshotChange={setSearchSnapshot}
+            initialSnapshot={snapshotMatchesContext ? searchSnapshot : null}
+            onSnapshotChange={(snapshot) => {
+              setSearchSnapshot({
+                ...snapshot,
+                targetCollectionId: routeCollectionId,
+              });
+            }}
+            targetCollectionId={routeCollectionId}
           />
         );
+      }
       case "recommend":
         return (
           <RecommendPage
@@ -4032,7 +4021,9 @@ export default function App() {
               openItemDetail(itemId, "collections", context)
             }
             openAddItem={(opts) => openCreateItem(opts)}
-            onNavigateToSearch={() => navigate({ name: "search" })}
+            onNavigateToSearch={(collectionId) =>
+              navigate({ name: "search", collectionId })
+            }
             onAddExistingItems={openAddExistingItems}
             collectionDetailRefreshNonce={collectionDetailRefreshNonce}
             itemWriteBusy={
@@ -4178,6 +4169,7 @@ export default function App() {
       {isCollectionPickerOverlayOpen && collectionPickerItem && (
         <CollectionPickerModal
           key={`picker-${collectionPickerItem.id}`}
+          mode="immediate"
           open
           item={collectionPickerItem}
           onClose={closeCollectionPicker}

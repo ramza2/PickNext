@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   addExistingItemsToCollection,
   getCategories,
@@ -7,6 +7,7 @@ import {
 } from "../../api/catalog";
 import { ApiError } from "../../api/client";
 import { ContentPoster } from "../components/ContentPoster";
+import { ClearableSearchInput } from "../components/ClearableSearchInput";
 import { getCategoryPresentation } from "../presentation/categoryPresentation";
 import type {
   ApiCategory,
@@ -283,21 +284,16 @@ export function AddExistingItemsModal({
           <label className="sr-only" htmlFor="add-existing-search">
             제목 검색
           </label>
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              ref={searchRef}
-              id="add-existing-search"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="제목 검색"
-              disabled={pending}
-              className="w-full pl-9 pr-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
-            />
-          </div>
+          <ClearableSearchInput
+            inputRef={searchRef}
+            id="add-existing-search"
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="제목 검색"
+            disabled={pending}
+            clearAriaLabel="검색어 지우기"
+            className="bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
+          />
           <div className="flex gap-2">
             <select
               value={categoryId}
