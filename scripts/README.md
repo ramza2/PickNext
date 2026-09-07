@@ -10,6 +10,7 @@
 | `export-local-db.ps1` | Local custom-format `pg_dump` + manifest + SHA-256 (read-only) |
 | `dpl3-remote-db-restore.sh` | Restore dump into fixed project `picknext-dpl3` only |
 | `dpl3-remote-deploy.sh` | DPL-3 remote deploy (postgres → migrate → seed → up) |
+| `deploy.sh` | DPL-3 **운영 서버** 일상 배포 (main ff-only → backend/frontend build·recreate only) |
 | `dpl3-remote-inspect.sh` | DPL-3 remote inspect helpers |
 
 Windows PowerShell 예:

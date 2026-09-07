@@ -167,10 +167,17 @@ docker compose --env-file .env.dpl3 -p picknext-dpl3 \
   -f compose.yaml -f compose.traefik.yaml up -d backend frontend
 ```
 
-또는 저장소 루트에서:
+또는 저장소 루트에서 **최초/전체 기동**:
 
 ```bash
 bash scripts/dpl3-remote-deploy.sh
+```
+
+이미 운영 중인 스택에 **backend/frontend만** 안전하게 재배포할 때 (PostgreSQL·Traefik 미변경, migration/seed 자동 실행 없음):
+
+```bash
+# 운영 서버: branch=main, working tree clean, .env.dpl3 준비
+./scripts/deploy.sh
 ```
 
 Migration/Seed 실패 시 Backend·Frontend를 기동하지 않습니다. Seed 진입점은 `app.services.seed.run_seed`만 사용합니다.
