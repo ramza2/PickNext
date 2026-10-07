@@ -6,8 +6,6 @@ export const ITEM_TITLE_EMPTY_ERROR = "항목 제목을 입력해 주세요.";
 export const ITEM_CATEGORY_REQUIRED_ERROR = "카테고리를 선택해 주세요.";
 export const ITEM_CATEGORY_EMPTY_LIST_ERROR =
   "항목을 추가하려면 먼저 카테고리가 필요합니다.";
-export const ITEM_PROGRESS_NOTE_TOO_LONG_ERROR =
-  "진행 상황은 200자 이하여야 합니다.";
 export const ITEM_RELEASE_YEAR_INVALID_ERROR =
   "출시년도는 4자리 숫자로 입력해 주세요.";
 export const ITEM_WRITE_VALIDATION_ERROR =
@@ -44,10 +42,8 @@ export function validateItemTitle(normalizedTitle: string): string | null {
   return null;
 }
 
-export function validateProgressNote(normalizedNote: string | null): string | null {
-  if (normalizedNote && normalizedNote.length > 200) {
-    return ITEM_PROGRESS_NOTE_TOO_LONG_ERROR;
-  }
+export function validateProgressNote(_normalizedNote: string | null): string | null {
+  // Length limit removed — backend stores progress_note as TEXT.
   return null;
 }
 

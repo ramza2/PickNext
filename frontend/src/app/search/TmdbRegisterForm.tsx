@@ -389,7 +389,6 @@ export function TmdbRegisterForm({
             <input
               value={values.progressNote}
               disabled={pending}
-              maxLength={200}
               onChange={(event) =>
                 setValues((prev) => ({
                   ...prev,

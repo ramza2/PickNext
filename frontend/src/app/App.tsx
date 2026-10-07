@@ -93,7 +93,6 @@ import {
   itemUnlinkValidationToast,
   itemUpdateFailureToast,
   isItemWriteNetworkOrServerError,
-  normalizeNullableText,
   collectItemFormFieldErrors,
   hasItemFormFieldErrors,
   buildCollectionUnlinkConfirmBody,
@@ -462,7 +461,6 @@ function ItemFormModal({
   const formErrorId = "item-form-modal-error";
   const formBusy = pending || busy;
 
-  const progressLength = normalizeNullableText(values.progressNote)?.length ?? 0;
   const formLevelError = fieldErrors.form ?? serverError;
 
   const editHasChanges = useMemo(() => {
@@ -909,22 +907,11 @@ function ItemFormModal({
               aria-describedby={fieldErrors.progressNote ? progressErrorId : undefined}
               className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50"
             />
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 mt-1.5">
-              {fieldErrors.progressNote ? (
-                <p id={progressErrorId} role="alert" className="text-xs text-red-600 break-words">
-                  {fieldErrors.progressNote}
-                </p>
-              ) : (
-                <span className="hidden sm:block"/>
-              )}
-              <span
-                className={`text-xs flex-shrink-0 sm:ml-auto ${
-                  progressLength > 200 ? "text-red-600" : "text-muted-foreground"
-                }`}
-              >
-                {progressLength}/200
-              </span>
-            </div>
+            {fieldErrors.progressNote ? (
+              <p id={progressErrorId} role="alert" className="text-xs text-red-600 break-words mt-1.5">
+                {fieldErrors.progressNote}
+              </p>
+            ) : null}
           </div>
 
           <div>

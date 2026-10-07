@@ -23,7 +23,6 @@ from app.services.legacy.transformer import ItemConversion, convert_legacy_item
 
 
 TITLE_REPAIR_SOURCE_ID = 2209
-PROGRESS_NOTE_MAX = 200
 
 REQUIRED_COLLECTION_PROGRESS_NOTES: tuple[str, ...] = (
     "007 시리즈",
@@ -135,12 +134,7 @@ def _map_import_fields(conv: ItemConversion) -> tuple[str | None, str | None, bo
         return classification.suggested_collection_name, None, False
 
     if classification.result == SeriesClassification.PROGRESS_NOTE:
-        note = classification.suggested_progress_note
-        truncated = False
-        if note and len(note) > PROGRESS_NOTE_MAX:
-            note = note[:PROGRESS_NOTE_MAX]
-            truncated = True
-        return None, note, False
+        return None, classification.suggested_progress_note, False
 
     return None, None, False
 
@@ -156,10 +150,6 @@ def _to_planned(conv: ItemConversion) -> PlannedImportItem:
     assert conv.updated_at is not None
 
     collection_name, progress_note, cleared_ambiguous = _map_import_fields(conv)
-    truncated = False
-    if progress_note and len(progress_note) > PROGRESS_NOTE_MAX:
-        progress_note = progress_note[:PROGRESS_NOTE_MAX]
-        truncated = True
 
     title = conv.title
 
@@ -176,7 +166,7 @@ def _to_planned(conv: ItemConversion) -> PlannedImportItem:
         collection_name=collection_name,
         progress_note=progress_note,
         cleared_ambiguous=cleared_ambiguous,
-        progress_note_truncated=truncated,
+        progress_note_truncated=False,
     )
 
 

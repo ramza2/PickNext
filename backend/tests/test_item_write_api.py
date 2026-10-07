@@ -383,13 +383,16 @@ def test_post_optional_text(api_client: TestClient, db: Session, owner: User) ->
         ).status_code
         == 201
     )
-    assert (
-        api_client.post(
-            "/api/v1/items",
-            json={"title": "노트4", "category_id": str(cat.id), "progress_note": long_note + "X"},
-        ).status_code
-        == 422
+    over_limit = api_client.post(
+        "/api/v1/items",
+        json={
+            "title": "노트4",
+            "category_id": str(cat.id),
+            "progress_note": long_note + "X",
+        },
     )
+    assert over_limit.status_code == 201
+    assert over_limit.json()["progress_note"] == long_note + "X"
 
     memo = api_client.post(
         "/api/v1/items",

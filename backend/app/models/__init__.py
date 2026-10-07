@@ -228,7 +228,7 @@ class Item(Base, TimestampMixin):
         nullable=False,
     )
     rating: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False)
-    progress_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    progress_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # External content identity (TMDB-1). All-null for Legacy/manual items.

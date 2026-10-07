@@ -87,8 +87,6 @@ def _normalize_optional_progress_note(value: object) -> str | None:
     normalized = value.strip()
     if not normalized:
         return None
-    if len(normalized) > 200:
-        raise ValueError("progress_note must be at most 200 characters")
     return normalized
 
 
