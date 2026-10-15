@@ -18,6 +18,9 @@ export interface ItemsListViewModel {
   updatedAt: string;
   releaseYear: number | null;
   posterUrl: string | null;
+  externalSource: string | null;
+  externalMediaType: string | null;
+  externalId: string | null;
   presentation: CategoryPresentation;
 }
 
@@ -38,6 +41,9 @@ export function mapApiItemToItemsListViewModel(
     updatedAt: item.updated_at,
     releaseYear: item.release_year ?? null,
     posterUrl: item.poster_url ?? null,
+    externalSource: item.external_source ?? null,
+    externalMediaType: item.external_media_type ?? null,
+    externalId: item.external_id ?? null,
     presentation: getCategoryPresentation(item.category.name),
   };
 }
