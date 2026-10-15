@@ -26,8 +26,8 @@ export const NAV_ORDER_CHANGED_EVENT = "picknext:nav-order-changed";
 
 const STORAGE_PREFIX = "picknext.nav-order.v1:";
 
-function storageKey(loginId: string): string {
-  return `${STORAGE_PREFIX}${encodeURIComponent(loginId)}`;
+function storageKey(userKey: string): string {
+  return `${STORAGE_PREFIX}${encodeURIComponent(userKey)}`;
 }
 
 export function normalizeDesktopNavOrder(value: unknown): DesktopNavId[] {
@@ -53,13 +53,13 @@ export function normalizeDesktopNavOrder(value: unknown): DesktopNavId[] {
   return normalized;
 }
 
-export function loadDesktopNavOrder(loginId?: string | null): DesktopNavId[] {
-  if (!loginId || typeof window === "undefined") {
+export function loadDesktopNavOrder(userKey?: string | null): DesktopNavId[] {
+  if (!userKey || typeof window === "undefined") {
     return [...DESKTOP_NAV_DEFAULT_ORDER];
   }
 
   try {
-    const raw = window.localStorage.getItem(storageKey(loginId));
+    const raw = window.localStorage.getItem(storageKey(userKey));
     if (!raw) return [...DESKTOP_NAV_DEFAULT_ORDER];
     return normalizeDesktopNavOrder(JSON.parse(raw));
   } catch {
@@ -68,21 +68,29 @@ export function loadDesktopNavOrder(loginId?: string | null): DesktopNavId[] {
 }
 
 export function saveDesktopNavOrder(
-  loginId: string,
+  userKey: string,
   order: readonly DesktopNavId[],
 ): DesktopNavId[] {
   const normalized = normalizeDesktopNavOrder(order);
-  window.localStorage.setItem(storageKey(loginId), JSON.stringify(normalized));
+  try {
+    window.localStorage.setItem(storageKey(userKey), JSON.stringify(normalized));
+  } catch {
+    // Keep the current-session order even when browser storage is unavailable.
+  }
   window.dispatchEvent(new CustomEvent(NAV_ORDER_CHANGED_EVENT, {
-    detail: { loginId },
+    detail: { userKey },
   }));
   return normalized;
 }
 
-export function resetDesktopNavOrder(loginId: string): DesktopNavId[] {
-  window.localStorage.removeItem(storageKey(loginId));
+export function resetDesktopNavOrder(userKey: string): DesktopNavId[] {
+  try {
+    window.localStorage.removeItem(storageKey(userKey));
+  } catch {
+    // Reset still applies for the current session when storage is unavailable.
+  }
   window.dispatchEvent(new CustomEvent(NAV_ORDER_CHANGED_EVENT, {
-    detail: { loginId },
+    detail: { userKey },
   }));
   return [...DESKTOP_NAV_DEFAULT_ORDER];
 }
