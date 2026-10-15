@@ -3436,9 +3436,11 @@ export default function App() {
   const historyDetailId =
     route.name === "recommendation-history-detail" ? route.historyId : null;
   const isItemEditOverlayOpen =
-    route.name === "item-detail"
-    && currentOverlay?.type === "item-edit"
-    && currentOverlay.itemId === route.itemId;
+    currentOverlay?.type === "item-edit"
+    && (
+      route.name === "items"
+      || (route.name === "item-detail" && currentOverlay.itemId === route.itemId)
+    );
   const isCollectionPickerOverlayOpen =
     route.name === "item-detail"
     && currentOverlay?.type === "item-collection-picker"
@@ -3483,7 +3485,14 @@ export default function App() {
   // A quick edit opened from the Items list intentionally has no history overlay.
   useEffect(() => {
     if (itemFormSession?.mode === "edit" && itemFormSession.returnToItemsList) {
-      if (route.name === "items") return;
+      if (
+        route.name === "items"
+        && isItemEditOverlayOpen
+        && currentOverlay?.type === "item-edit"
+        && currentOverlay.itemId === itemFormSession.item.id
+      ) {
+        return;
+      }
       clearEditItemFormSession();
       return;
     }
@@ -3770,6 +3779,7 @@ export default function App() {
         origin: "items",
         returnToItemsList: true,
       });
+      openOverlay({ type: "item-edit", itemId: item.id });
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         showToast(ITEM_NOT_FOUND_TOAST);
@@ -3777,7 +3787,7 @@ export default function App() {
         showToast("항목 정보를 불러오지 못했습니다.");
       }
     }
-  }, [itemFormSession, itemWriteBusy, route.name, showToast]);
+  }, [itemFormSession, itemWriteBusy, openOverlay, route.name, showToast]);
 
   const openEditItem = useCallback((item: ApiItemDetail) => {
     if (itemWriteBusy) return;
@@ -3867,6 +3877,7 @@ export default function App() {
     session: Extract<ItemFormSession, { mode: "edit" }>,
   ) => {
     if (session.returnToItemsList) {
+      closeOverlay();
       setItemFormSession(null);
       setItemsRefreshNonce((value) => value + 1);
       showToast("항목을 수정했습니다.");
@@ -4275,7 +4286,6 @@ export default function App() {
       {itemFormSession && (
         itemFormSession.mode === "create"
         || isItemEditOverlayOpen
-        || (itemFormSession.mode === "edit" && itemFormSession.returnToItemsList)
       ) && (
         <ItemFormModal
           key={
