@@ -1767,6 +1767,7 @@ function ItemsPage({
   openAddItem,
   openItemDetail,
   openQuickEdit,
+  onItemDeleted,
   refreshNonce,
   initialSnapshot,
   onSnapshotChange,
@@ -1775,6 +1776,7 @@ function ItemsPage({
   openAddItem: (opts?: { categoryId?: string | null }) => void;
   openItemDetail: (itemId: string) => void;
   openQuickEdit: (itemId: string) => void;
+  onItemDeleted: (item: ItemsListViewModel) => void;
   refreshNonce: number;
   initialSnapshot?: ItemsPageStateSnapshot | null;
   onSnapshotChange?: (snapshot: ItemsPageStateSnapshot) => void;
@@ -1923,6 +1925,7 @@ function ItemsPage({
     setDeletePending(true);
     try {
       await deleteItem(target.id);
+      onItemDeleted(target);
       setDeleteTarget(null);
       setSelected((prev) => {
         const next = new Set(prev);
@@ -4141,6 +4144,16 @@ export default function App() {
             }
             openItemDetail={(id) => openItemDetail(id, "items")}
             openQuickEdit={openQuickEditItem}
+            onItemDeleted={(deleted) => {
+              setSearchSnapshot((prev) =>
+                unmarkDeletedItemInSearchSnapshot(prev, {
+                  id: deleted.id,
+                  external_source: deleted.externalSource,
+                  external_media_type: deleted.externalMediaType,
+                  external_id: deleted.externalId,
+                }),
+              );
+            }}
             refreshNonce={itemsRefreshNonce}
             initialSnapshot={itemsSnapshot}
             onSnapshotChange={setItemsSnapshot}
