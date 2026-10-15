@@ -9,17 +9,17 @@ import {
 } from "./navigationOrder";
 
 export function NavigationOrderSettings({
-  loginId,
+  userKey,
 }: {
-  loginId: string;
+  userKey: string;
 }) {
   const [order, setOrder] = useState<DesktopNavId[]>(() =>
-    loadDesktopNavOrder(loginId),
+    loadDesktopNavOrder(userKey),
   );
 
   useEffect(() => {
-    setOrder(loadDesktopNavOrder(loginId));
-  }, [loginId]);
+    setOrder(loadDesktopNavOrder(userKey));
+  }, [userKey]);
 
   const move = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
@@ -27,12 +27,12 @@ export function NavigationOrderSettings({
 
     const next = [...order];
     [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-    const saved = saveDesktopNavOrder(loginId, next);
+    const saved = saveDesktopNavOrder(userKey, next);
     setOrder(saved);
   };
 
   const reset = () => {
-    setOrder(resetDesktopNavOrder(loginId));
+    setOrder(resetDesktopNavOrder(userKey));
   };
 
   return (
