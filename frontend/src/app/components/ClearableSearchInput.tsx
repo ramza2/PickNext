@@ -51,7 +51,9 @@ export function ClearableSearchInput({
       <input
         {...rest}
         ref={setRefs}
-        type="search"
+        type="text"
+        inputMode="search"
+        role="searchbox"
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
