@@ -34,6 +34,8 @@ assert.doesNotMatch(app, /<MoreVertical/);
 assert.match(app, /handleQuickStatusToggle/);
 assert.match(app, /handleQuickDeleteConfirm/);
 assert.match(app, /openQuickEditItem/);
+assert.match(app, /unmarkDeletedItemInSearchSnapshot/);
+assert.match(app, /external_source:\s*deleted\.externalSource/);
 
 // Quick edit from the list participates in the existing history overlay contract.
 assert.match(app, /returnToItemsList/);
