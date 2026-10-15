@@ -1,29 +1,40 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Home, Search, List, Folder, Settings, Shuffle, Clock,
   Plus, Target, MoreHorizontal, ChevronRight,
 } from "lucide-react";
 import type { Page } from "../pageTypes";
+import {
+  DESKTOP_NAV_LABELS,
+  NAV_ORDER_CHANGED_EVENT,
+  loadDesktopNavOrder,
+  type DesktopNavId,
+} from "./navigationOrder";
 
-const NAV: { id: Page; label: string; icon: ReactNode }[] = [
-  { id: "home", label: "홈", icon: <Home size={17} /> },
-  { id: "recommend", label: "랜덤 추천", icon: <Shuffle size={17} /> },
-  { id: "items", label: "전체 항목", icon: <List size={17} /> },
-  { id: "search", label: "콘텐츠 검색", icon: <Search size={17} /> },
-  { id: "collections", label: "Collection", icon: <Folder size={17} /> },
-  { id: "history", label: "추천 이력", icon: <Clock size={17} /> },
-  { id: "settings", label: "설정", icon: <Settings size={17} /> },
+type NavItem = { id: DesktopNavId; label: string; icon: ReactNode };
+
+const NAV_BY_ID: Record<DesktopNavId, NavItem> = {
+  home: { id: "home", label: DESKTOP_NAV_LABELS.home, icon: <Home size={17} /> },
+  items: { id: "items", label: DESKTOP_NAV_LABELS.items, icon: <List size={17} /> },
+  collections: { id: "collections", label: DESKTOP_NAV_LABELS.collections, icon: <Folder size={17} /> },
+  search: { id: "search", label: DESKTOP_NAV_LABELS.search, icon: <Search size={17} /> },
+  recommend: { id: "recommend", label: DESKTOP_NAV_LABELS.recommend, icon: <Shuffle size={17} /> },
+  history: { id: "history", label: DESKTOP_NAV_LABELS.history, icon: <Clock size={17} /> },
+  settings: { id: "settings", label: DESKTOP_NAV_LABELS.settings, icon: <Settings size={17} /> },
+};
+
+const MOBILE_PRIMARY: NavItem[] = [
+  NAV_BY_ID.home,
+  NAV_BY_ID.recommend,
+  NAV_BY_ID.items,
 ];
 
-const MOBILE_PRIMARY = NAV.filter((item) =>
-  item.id === "home" || item.id === "recommend" || item.id === "items",
-);
-const MORE_NAV = NAV.filter((item) =>
-  item.id === "search" ||
-  item.id === "collections" ||
-  item.id === "history" ||
-  item.id === "settings",
-);
+const MORE_NAV: NavItem[] = [
+  NAV_BY_ID.search,
+  NAV_BY_ID.collections,
+  NAV_BY_ID.history,
+  NAV_BY_ID.settings,
+];
 
 interface AppLayoutProps {
   /** Sidebar / bottom-nav highlight (detail routes map to parent). */
@@ -33,6 +44,7 @@ interface AppLayoutProps {
   onAddItem: () => void;
   children: ReactNode;
   loginId?: string | null;
+  navOrderKey?: string | null;
   onLogout?: () => void;
 }
 
@@ -43,9 +55,30 @@ export default function AppLayout({
   onAddItem,
   children,
   loginId,
+  navOrderKey,
   onLogout,
 }: AppLayoutProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [desktopNavOrder, setDesktopNavOrder] = useState<DesktopNavId[]>(() =>
+    loadDesktopNavOrder(navOrderKey),
+  );
+
+  useEffect(() => {
+    const syncOrder = () => setDesktopNavOrder(loadDesktopNavOrder(navOrderKey));
+    syncOrder();
+    window.addEventListener(NAV_ORDER_CHANGED_EVENT, syncOrder);
+    window.addEventListener("storage", syncOrder);
+    return () => {
+      window.removeEventListener(NAV_ORDER_CHANGED_EVENT, syncOrder);
+      window.removeEventListener("storage", syncOrder);
+    };
+  }, [navOrderKey]);
+
+  const desktopNav = useMemo(
+    () => desktopNavOrder.map((id) => NAV_BY_ID[id]),
+    [desktopNavOrder],
+  );
+
   const navTo = (p: Page) => {
     onNavigate(p);
     setMoreOpen(false);
@@ -71,7 +104,7 @@ export default function AppLayout({
           )}
         </div>
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {NAV.map((item) => (
+          {desktopNav.map((item) => (
             <button
               key={item.id}
               type="button"

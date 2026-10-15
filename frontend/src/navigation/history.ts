@@ -56,7 +56,13 @@ export function normalizeOverlayForRoute(
   overlay: AppOverlay | null | undefined,
 ): AppOverlay | null {
   if (!overlay) return null;
-  if (overlay.type === "item-edit" || overlay.type === "item-collection-picker") {
+  if (overlay.type === "item-edit") {
+    if (route.name === "items") return overlay;
+    if (route.name !== "item-detail") return null;
+    if (overlay.itemId !== route.itemId) return null;
+    return overlay;
+  }
+  if (overlay.type === "item-collection-picker") {
     if (route.name !== "item-detail") return null;
     if (overlay.itemId !== route.itemId) return null;
     return overlay;

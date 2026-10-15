@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
   Search, Shuffle, Plus, Star, AlignJustify,
-  Grid, X, RefreshCw, Edit2, MoreVertical, ChevronLeft, ChevronRight,
+  Grid, X, RefreshCw, Edit2, ChevronLeft, ChevronRight,
   CheckCircle, Layers, Trash2, Check,
   Palette,
 } from "lucide-react";
@@ -11,6 +11,7 @@ import { CollectionSelectField } from "./collections/CollectionSelectField";
 import { AddExistingItemsModal } from "./collections/AddExistingItemsModal";
 import type { Page } from "./pageTypes";
 import AppLayout from "./layout/AppLayout";
+import { NavigationOrderSettings } from "./layout/NavigationOrderSettings";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import {
   useAppNavigation,
@@ -44,6 +45,7 @@ import {
 import {
   displayItemRating,
   mapApiItemToItemsListViewModel,
+  type ItemsListViewModel,
 } from "./mappers/items";
 import {
   mapApiCollectionToDetail,
@@ -58,6 +60,7 @@ import { formatDate } from "../utils/date";
 import { ContentPoster, formatReleaseYearMeta } from "./components/ContentPoster";
 import { ListPaginationBar } from "./components/ListPaginationBar";
 import { ClearableSearchInput } from "./components/ClearableSearchInput";
+import { ItemQuickActionsMenu } from "./components/ItemQuickActionsMenu";
 import { deleteCollection, deleteItem, getCollection, createCollection, updateCollection, createItem, updateItem, getItem, getCategories } from "../api/catalog";
 import {
   collectionCreateFailureToast,
@@ -370,6 +373,7 @@ type ItemFormSession =
       origin: ItemDetailOrigin;
       collectionId?: string;
       collectionItemsPage?: number;
+      returnToItemsList?: boolean;
     };
 
 function emptyItemFormValues(
@@ -1762,12 +1766,18 @@ function ItemsPage({
   showToast,
   openAddItem,
   openItemDetail,
+  openQuickEdit,
+  onItemDeleted,
+  refreshNonce,
   initialSnapshot,
   onSnapshotChange,
 }: {
   showToast: (m: string) => void;
   openAddItem: (opts?: { categoryId?: string | null }) => void;
   openItemDetail: (itemId: string) => void;
+  openQuickEdit: (itemId: string) => void;
+  onItemDeleted: (item: ItemsListViewModel) => void;
+  refreshNonce: number;
   initialSnapshot?: ItemsPageStateSnapshot | null;
   onSnapshotChange?: (snapshot: ItemsPageStateSnapshot) => void;
 }) {
@@ -1778,6 +1788,9 @@ function ItemsPage({
     initialSnapshot?.viewMode ?? "card",
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [quickActionPendingId, setQuickActionPendingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ItemsListViewModel | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
   const onSnapshotChangeRef = useRef(onSnapshotChange);
   onSnapshotChangeRef.current = onSnapshotChange;
 
@@ -1819,6 +1832,11 @@ function ItemsPage({
       });
     },
   });
+
+  useEffect(() => {
+    if (refreshNonce <= 0) return;
+    void reloadItems();
+  }, [refreshNonce, reloadItems]);
 
   const setViewMode = (mode: ItemsViewMode) => {
     viewModeRef.current = mode;
@@ -1875,6 +1893,61 @@ function ItemsPage({
     showToast("일괄 작업 API는 아직 연결되지 않았습니다.");
   };
 
+  const handleQuickStatusToggle = async (item: ItemsListViewModel) => {
+    if (quickActionPendingId || deletePending) return;
+    const nextStatus: ApiItemStatus =
+      item.status === "PLANNED" ? "COMPLETED" : "PLANNED";
+    setQuickActionPendingId(item.id);
+    try {
+      await updateItem(item.id, { status: nextStatus });
+      showToast(itemStatusSuccessToast(nextStatus));
+      await reloadItems();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        showToast(ITEM_NOT_FOUND_TOAST);
+        await reloadItems();
+      } else if (err instanceof ApiError && err.status === 409) {
+        showToast(itemStatusConflictToast());
+        await reloadItems();
+      } else if (err instanceof ApiError && err.status === 422) {
+        showToast(itemStatusValidationToast());
+      } else {
+        showToast(itemStatusUpdateFailureToast());
+      }
+    } finally {
+      setQuickActionPendingId(null);
+    }
+  };
+
+  const handleQuickDeleteConfirm = async () => {
+    if (!deleteTarget || deletePending || quickActionPendingId) return;
+    const target = deleteTarget;
+    setDeletePending(true);
+    try {
+      await deleteItem(target.id);
+      onItemDeleted(target);
+      setDeleteTarget(null);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(target.id);
+        return next;
+      });
+      showToast("항목을 삭제했습니다.");
+      await reloadItems();
+    } catch (err) {
+      showToast(itemDeleteErrorMessage(err));
+      if (err instanceof ApiError && err.status === 404) {
+        setDeleteTarget(null);
+        await reloadItems();
+      }
+    } finally {
+      setDeletePending(false);
+    }
+  };
+
+  const quickActionsDisabled =
+    isItemsLoading || quickActionPendingId !== null || deletePending;
+
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
 
@@ -1887,6 +1960,7 @@ function ItemsPage({
         aria-label={`${item.title} 상세 보기`}
         onClick={() => onItemActivate(item.id)}
         onKeyDown={e => {
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onItemActivate(item.id);
@@ -1916,9 +1990,15 @@ function ItemsPage({
                 </div>
               )}
             </div>
-            <button onClick={e=>{ e.stopPropagation(); }} className="text-muted-foreground flex-shrink-0 hover:text-foreground">
-              <MoreVertical size={14}/>
-            </button>
+            <div className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
+              <ItemQuickActionsMenu
+                item={item}
+                disabled={quickActionsDisabled}
+                onEdit={(target) => openQuickEdit(target.id)}
+                onToggleStatus={(target) => void handleQuickStatusToggle(target)}
+                onDelete={setDeleteTarget}
+              />
+            </div>
           </div>
           <div className="flex flex-wrap gap-1 mt-1.5">
             <span className="inline-flex items-center gap-1 rounded font-medium text-[10px] px-1.5 py-px"
@@ -2120,6 +2200,7 @@ function ItemsPage({
                       <tr key={item.id}
                         onClick={() => onItemActivate(item.id)}
                         onKeyDown={e => {
+                          if (e.target !== e.currentTarget) return;
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
                             onItemActivate(item.id);
@@ -2159,7 +2240,13 @@ function ItemsPage({
                         <td className="px-3 py-3 text-xs text-muted-foreground max-w-[120px] truncate">{item.progressNote||"—"}</td>
                         <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDate(item.updatedAt) || "—"}</td>
                         <td className="px-3 py-3" onClick={e=>e.stopPropagation()}>
-                          <button className="text-muted-foreground hover:text-foreground"><MoreVertical size={14}/></button>
+                          <ItemQuickActionsMenu
+                            item={item}
+                            disabled={quickActionsDisabled}
+                            onEdit={(target) => openQuickEdit(target.id)}
+                            onToggleStatus={(target) => void handleQuickStatusToggle(target)}
+                            onDelete={setDeleteTarget}
+                          />
                         </td>
                       </tr>
                     );
@@ -2188,6 +2275,21 @@ function ItemsPage({
           hasNext={hasNext}
           onPageChange={setPage}
           summary={`${rangeStart}–${rangeEnd} / ${total.toLocaleString("ko-KR")}건`}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmModal
+          title="항목 삭제"
+          body={`"${deleteTarget.title}" 항목을 삭제합니다.\n삭제된 항목은 복구할 수 없습니다.\n추천 이력이나 Collection에 연결된 정보도 함께 변경될 수 있습니다.`}
+          danger
+          confirmLabel="삭제"
+          pending={deletePending}
+          pendingLabel="삭제 중..."
+          onConfirm={() => void handleQuickDeleteConfirm()}
+          onClose={() => {
+            if (!deletePending) setDeleteTarget(null);
+          }}
         />
       )}
     </div>
@@ -3201,6 +3303,9 @@ function SettingsPage({
           </button>
         </div>
       )}
+      {authUser && (
+        <NavigationOrderSettings userKey={authUser.id} />
+      )}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <button onClick={() => setPage("category-manage")}
           className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/40 transition-colors text-left">
@@ -3322,6 +3427,7 @@ export default function App() {
   const [itemFormSession, setItemFormSession] = useState<ItemFormSession | null>(null);
   const [itemWriteBusy, setItemWriteBusy] = useState(false);
   const [itemDetailNonce, setItemDetailNonce] = useState(0);
+  const [itemsRefreshNonce, setItemsRefreshNonce] = useState(0);
   const [collectionDetailRefreshNonce, setCollectionDetailRefreshNonce] = useState(0);
   const [collectionPickerItem, setCollectionPickerItem] =
     useState<ApiItemDetail | null>(null);
@@ -3335,9 +3441,11 @@ export default function App() {
   const historyDetailId =
     route.name === "recommendation-history-detail" ? route.historyId : null;
   const isItemEditOverlayOpen =
-    route.name === "item-detail"
-    && currentOverlay?.type === "item-edit"
-    && currentOverlay.itemId === route.itemId;
+    currentOverlay?.type === "item-edit"
+    && (
+      route.name === "items"
+      || (route.name === "item-detail" && currentOverlay.itemId === route.itemId)
+    );
   const isCollectionPickerOverlayOpen =
     route.name === "item-detail"
     && currentOverlay?.type === "item-collection-picker"
@@ -3379,7 +3487,21 @@ export default function App() {
   }, []);
 
   // Keep Edit Session in sync with History Overlay (Source of Truth).
+  // A quick edit opened from the Items list intentionally has no history overlay.
   useEffect(() => {
+    if (itemFormSession?.mode === "edit" && itemFormSession.returnToItemsList) {
+      if (
+        route.name === "items"
+        && isItemEditOverlayOpen
+        && currentOverlay?.type === "item-edit"
+        && currentOverlay.itemId === itemFormSession.item.id
+      ) {
+        return;
+      }
+      clearEditItemFormSession();
+      return;
+    }
+
     if (!isItemEditOverlayOpen) {
       clearEditItemFormSession();
       return;
@@ -3651,6 +3773,27 @@ export default function App() {
     });
   }, [currentPageName, itemFormSession, itemWriteBusy]);
 
+  const openQuickEditItem = useCallback(async (itemId: string) => {
+    if (itemWriteBusy || itemFormSession) return;
+    try {
+      const item = await getItem(itemId);
+      if (route.name !== "items") return;
+      setItemFormSession({
+        mode: "edit",
+        item,
+        origin: "items",
+        returnToItemsList: true,
+      });
+      openOverlay({ type: "item-edit", itemId: item.id });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        showToast(ITEM_NOT_FOUND_TOAST);
+      } else {
+        showToast("항목 정보를 불러오지 못했습니다.");
+      }
+    }
+  }, [itemFormSession, itemWriteBusy, openOverlay, route.name, showToast]);
+
   const openEditItem = useCallback((item: ApiItemDetail) => {
     if (itemWriteBusy) return;
     if (itemFormSession?.mode === "create") return;
@@ -3738,6 +3881,14 @@ export default function App() {
     updated: ApiItemDetail,
     session: Extract<ItemFormSession, { mode: "edit" }>,
   ) => {
+    if (session.returnToItemsList) {
+      closeOverlay();
+      setItemFormSession(null);
+      setItemsRefreshNonce((value) => value + 1);
+      showToast("항목을 수정했습니다.");
+      return;
+    }
+
     setItemDetailOrigin(session.origin);
     setItemDetailExtras({
       collectionId: session.collectionId,
@@ -3992,6 +4143,18 @@ export default function App() {
               })
             }
             openItemDetail={(id) => openItemDetail(id, "items")}
+            openQuickEdit={openQuickEditItem}
+            onItemDeleted={(deleted) => {
+              setSearchSnapshot((prev) =>
+                unmarkDeletedItemInSearchSnapshot(prev, {
+                  id: deleted.id,
+                  external_source: deleted.externalSource,
+                  external_media_type: deleted.externalMediaType,
+                  external_id: deleted.externalId,
+                }),
+              );
+            }}
+            refreshNonce={itemsRefreshNonce}
             initialSnapshot={itemsSnapshot}
             onSnapshotChange={setItemsSnapshot}
           />
@@ -4129,12 +4292,16 @@ export default function App() {
         onNavigate={navigateFromLayout}
         onAddItem={() => openCreateItem()}
         loginId={authUser?.login_id ?? null}
+        navOrderKey={authUser?.id ?? null}
         onLogout={() => void handleLogout()}
       >
         {renderPage()}
       </AppLayout>
 
-      {itemFormSession && (itemFormSession.mode === "create" || isItemEditOverlayOpen) && (
+      {itemFormSession && (
+        itemFormSession.mode === "create"
+        || isItemEditOverlayOpen
+      ) && (
         <ItemFormModal
           key={
             itemFormSession.mode === "edit"
