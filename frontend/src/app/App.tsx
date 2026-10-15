@@ -3299,7 +3299,7 @@ function SettingsPage({
         </div>
       )}
       {authUser && (
-        <NavigationOrderSettings loginId={authUser.login_id ?? authUser.email} />
+        <NavigationOrderSettings userKey={authUser.id} />
       )}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <button onClick={() => setPage("category-manage")}
@@ -4266,6 +4266,7 @@ export default function App() {
         onNavigate={navigateFromLayout}
         onAddItem={() => openCreateItem()}
         loginId={authUser?.login_id ?? null}
+        navOrderKey={authUser?.id ?? null}
         onLogout={() => void handleLogout()}
       >
         {renderPage()}
