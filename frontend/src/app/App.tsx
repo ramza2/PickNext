@@ -1957,6 +1957,7 @@ function ItemsPage({
         aria-label={`${item.title} 상세 보기`}
         onClick={() => onItemActivate(item.id)}
         onKeyDown={e => {
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onItemActivate(item.id);
@@ -2196,6 +2197,7 @@ function ItemsPage({
                       <tr key={item.id}
                         onClick={() => onItemActivate(item.id)}
                         onKeyDown={e => {
+                          if (e.target !== e.currentTarget) return;
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
                             onItemActivate(item.id);
