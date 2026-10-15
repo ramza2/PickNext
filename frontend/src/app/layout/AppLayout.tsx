@@ -44,6 +44,7 @@ interface AppLayoutProps {
   onAddItem: () => void;
   children: ReactNode;
   loginId?: string | null;
+  navOrderKey?: string | null;
   onLogout?: () => void;
 }
 
@@ -54,15 +55,16 @@ export default function AppLayout({
   onAddItem,
   children,
   loginId,
+  navOrderKey,
   onLogout,
 }: AppLayoutProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [desktopNavOrder, setDesktopNavOrder] = useState<DesktopNavId[]>(() =>
-    loadDesktopNavOrder(loginId),
+    loadDesktopNavOrder(navOrderKey),
   );
 
   useEffect(() => {
-    const syncOrder = () => setDesktopNavOrder(loadDesktopNavOrder(loginId));
+    const syncOrder = () => setDesktopNavOrder(loadDesktopNavOrder(navOrderKey));
     syncOrder();
     window.addEventListener(NAV_ORDER_CHANGED_EVENT, syncOrder);
     window.addEventListener("storage", syncOrder);
@@ -70,7 +72,7 @@ export default function AppLayout({
       window.removeEventListener(NAV_ORDER_CHANGED_EVENT, syncOrder);
       window.removeEventListener("storage", syncOrder);
     };
-  }, [loginId]);
+  }, [navOrderKey]);
 
   const desktopNav = useMemo(
     () => desktopNavOrder.map((id) => NAV_BY_ID[id]),
